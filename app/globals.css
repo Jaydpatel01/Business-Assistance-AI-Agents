@@ -1,0 +1,258 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Light Theme - Your Custom Sage Green & Teal Colors */
+  --background: 130 11% 82%; /* #D3D9D4 - soft sage green */
+  --foreground: 203 40% 25%; /* #2E4756 - dark blue-gray */
+  --card: 130 11% 82%; /* #D3D9D4 - matches background */
+  --card-foreground: 203 40% 25%; /* #2E4756 - dark blue-gray */
+  --popover: 130 11% 82%; /* #D3D9D4 */
+  --popover-foreground: 203 40% 25%; /* #2E4756 */
+  --primary: 177 39% 42%; /* #45A29E - teal */
+  --primary-foreground: 0 0% 100%; /* white for contrast */
+  --secondary: 155 25% 75%; /* #BFD8D2 - light mint */
+  --secondary-foreground: 203 40% 25%; /* #2E4756 */
+  --muted: 203 19% 40%; /* #5C6E74 - medium gray */
+  --muted-foreground: 203 40% 25%; /* #2E4756 */
+  --accent: 155 25% 75%; /* #BFD8D2 - light mint */
+  --accent-foreground: 203 40% 25%; /* #2E4756 */
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 155 25% 70%; /* slightly darker than secondary */
+  --input: 155 25% 70%; /* slightly darker than secondary */
+  --ring: 177 39% 42%; /* #45A29E - teal */
+  --chart-1: 177 39% 42%; /* #45A29E - teal */
+  --chart-2: 155 25% 75%; /* #BFD8D2 - light mint */
+  --chart-3: 203 19% 40%; /* #5C6E74 - medium gray */
+  --chart-4: 130 11% 70%; /* darker sage */
+  --chart-5: 203 40% 35%; /* darker blue-gray */
+  --radius: 0.5rem;
+  --sidebar-background: 130 11% 80%; /* slightly darker sage */
+  --sidebar-foreground: 203 40% 25%; /* #2E4756 */
+  --sidebar-primary: 177 39% 42%; /* #45A29E - teal */
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 155 25% 72%; /* slightly darker mint */
+  --sidebar-accent-foreground: 203 40% 25%;
+  --sidebar-border: 155 25% 65%;
+  --sidebar-ring: 177 39% 42%;
+}
+
+.dark {
+  /* Dark Theme - Your Custom Deep Dark & Bright Cyan Colors */
+  --background: 210 22% 4%; /* #0B0C10 - deep dark */
+  --foreground: 210 3% 78%; /* #C5C6C7 - light gray */
+  --card: 210 20% 18%; /* #1F2833 - dark blue-gray */
+  --card-foreground: 210 3% 78%; /* #C5C6C7 - light gray */
+  --popover: 210 20% 18%; /* #1F2833 */
+  --popover-foreground: 210 3% 78%; /* #C5C6C7 */
+  --primary: 178 100% 70%; /* #66FCF1 - bright cyan */
+  --primary-foreground: 210 22% 4%; /* #0B0C10 - deep dark for contrast */
+  --secondary: 210 20% 25%; /* lighter than card */
+  --secondary-foreground: 210 3% 78%; /* #C5C6C7 */
+  --muted: 210 20% 15%; /* darker variant */
+  --muted-foreground: 210 3% 65%; /* dimmer light gray */
+  --accent: 210 20% 22%; /* accent variant */
+  --accent-foreground: 178 100% 70%; /* bright cyan */
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 210 20% 25%; /* subtle border */
+  --input: 210 20% 20%; /* input background */
+  --ring: 178 100% 70%; /* #66FCF1 - bright cyan */
+  --chart-1: 178 100% 70%; /* #66FCF1 - bright cyan */
+  --chart-2: 210 20% 30%; /* lighter blue-gray */
+  --chart-3: 210 3% 60%; /* medium gray */
+  --chart-4: 210 20% 25%; /* darker variant */
+  --chart-5: 180 100% 50%; /* cyan variant */
+  --sidebar-background: 210 20% 15%; /* darker than card */
+  --sidebar-foreground: 210 3% 78%; /* #C5C6C7 */
+  --sidebar-primary: 178 100% 70%; /* #66FCF1 - bright cyan */
+  --sidebar-primary-foreground: 210 22% 4%;
+  --sidebar-accent: 210 20% 22%;
+  --sidebar-accent-foreground: 210 3% 78%;
+  --sidebar-border: 210 20% 20%;
+  --sidebar-ring: 178 100% 70%;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+}
+
+/* Custom scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Smooth transitions */
+* {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Enhanced shadows */
+.shadow-modern {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.shadow-modern-lg {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+.shadow-modern-xl {
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+/* Modern button hover effects */
+.btn-modern {
+  @apply relative overflow-hidden;
+}
+
+.btn-modern::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.btn-modern:hover::before {
+  left: 100%;
+}
+
+/* Glass morphism effect */
+.glass {
+  backdrop-filter: blur(16px) saturate(180%);
+  background-color: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.dark .glass {
+  background-color: rgba(31, 40, 51, 0.75); /* Using actual color values */
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Enhanced focus states */
+.focus-modern:focus-visible {
+  @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-background;
+}
+
+/* Modern card hover effects */
+.card-hover {
+  @apply transition-all duration-300 ease-out;
+}
+
+.card-hover:hover {
+  @apply -translate-y-1 shadow-modern-lg;
+}
+
+/* Status indicators */
+.status-dot {
+  @apply w-2 h-2 rounded-full;
+}
+
+.status-online {
+  background-color: hsl(177, 39%, 42%); /* teal color */
+  box-shadow: 0 0 0 2px hsla(177, 39%, 42%, 0.2);
+}
+
+.status-busy {
+  background-color: hsl(155, 25%, 75%); /* light mint */
+  box-shadow: 0 0 0 2px hsla(155, 25%, 75%, 0.2);
+}
+
+.status-offline {
+  background-color: hsl(203, 19%, 40%); /* medium gray */
+  box-shadow: 0 0 0 2px hsla(203, 19%, 40%, 0.2);
+}
+
+/* Loading animations */
+@keyframes shimmer {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: calc(200px + 100%) 0;
+  }
+}
+
+@keyframes move {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 50px 50px;
+  }
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    hsl(210, 20%, 96%) 0px,
+    hsla(215, 16%, 47%, 0.1) 40px,
+    hsl(210, 20%, 96%) 80px
+  );
+  background-size: 200px 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Modern progress bars */
+.progress-modern {
+  @apply relative overflow-hidden rounded-full;
+}
+
+.progress-modern::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  background-image: linear-gradient(
+    -45deg,
+    rgba(255, 255, 255, 0.2) 25%,
+    transparent 25%,
+    transparent 50%,
+    rgba(255, 255, 255, 0.2) 50%,
+    rgba(255, 255, 255, 0.2) 75%,
+    transparent 75%,
+    transparent
+  );
+  background-size: 50px 50px;
+  animation: move 2s linear infinite;
+}

@@ -1,0 +1,168 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// User and Authentication Models
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?   // For credential-based authentication
+  role          String    @default("user") // user, admin, etc.
+  company       String?   // Company/organization name
+  organizationId String?   // For multi-tenancy
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  accounts      Account[]
+  sessions      Session[]
+  scenarios     Scenario[] // Scenarios created by the user
+  participants  Participant[] // Sessions where the user is a participant
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// Core Business Models
+model Scenario {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  status      String   // draft, active, archived
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  organizationId String? // For multi-tenancy
+  
+  // JSON fields for flexible configuration (stored as text in SQLite)
+  parameters  String?    // JSON string for scenario-specific parameters
+  tags        String?    // JSON array as string for categorization
+  
+  // Relations
+  sessions    BoardroomSession[]
+}
+
+model BoardroomSession {
+  id          String   @id @default(cuid())
+  name        String
+  scenarioId  String
+  scenario    Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  startedAt   DateTime?
+  endedAt     DateTime?
+  status      String   // scheduled, active, completed
+  
+  // Relations
+  messages    Message[]
+  decisions   Decision[]
+  participants Participant[]
+  documents   Document[]
+}
+
+model Participant {
+  id        String   @id @default(cuid())
+  sessionId String
+  session   BoardroomSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String   // observer, facilitator, participant
+  joinedAt  DateTime @default(now())
+  leftAt    DateTime?
+  
+  // Relations
+  messages  Message[]
+  
+  @@unique([sessionId, userId])
+}
+
+model Message {
+  id            String   @id @default(cuid())
+  sessionId     String
+  session       BoardroomSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  participantId String?
+  participant   Participant? @relation(fields: [participantId], references: [id])
+  content       String
+  agentType     String?  // CEO, CFO, CTO, HR, etc. (null for human users)
+  parentId      String?  // For threaded replies
+  parent        Message? @relation("MessageReplies", fields: [parentId], references: [id])
+  replies       Message[] @relation("MessageReplies")
+  createdAt     DateTime @default(now())
+  metadata      String?    // JSON string for storing additional message data
+}
+
+model Decision {
+  id          String   @id @default(cuid())
+  sessionId   String
+  session     BoardroomSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  title       String
+  description String
+  status      String   // proposed, approved, rejected
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  metadata    String?    // JSON string for storing voting results, etc.
+}
+
+model Document {
+  id          String   @id @default(cuid())
+  sessionId   String
+  session     BoardroomSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  name        String
+  type        String   // pdf, image, spreadsheet, etc.
+  url         String
+  createdAt   DateTime @default(now())
+  metadata    String?    // JSON string for storing document analysis, etc.
+}
+
+// Vector Store for RAG (Retrieval Augmented Generation)
+model VectorEmbedding {
+  id          String   @id @default(cuid())
+  content     String
+  embedding   String   // Storing as JSON string for SQLite compatibility
+  metadata    String   // Storing as JSON string for SQLite
+  createdAt   DateTime @default(now())
+  organizationId String? // For multi-tenancy
+}
