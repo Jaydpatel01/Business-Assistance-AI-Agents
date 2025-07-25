@@ -64,15 +64,15 @@ export async function POST(request: Request) {
     }
 
     // Parse additional data
-    const sessionId = formData.get('sessionId') as string;
+    const sessionId = formData.get('sessionId') as string | null;
     const category = formData.get('category') as string || 'general';
-    const description = formData.get('description') as string;
+    const description = formData.get('description') as string | null;
 
     // Validate additional data
     const validatedData = UploadRequestSchema.parse({
-      sessionId,
+      sessionId: sessionId || undefined,
       category,
-      description
+      description: description || undefined
     });
 
     // Create upload directory

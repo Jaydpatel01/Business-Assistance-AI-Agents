@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 import Anthropic from '@anthropic-ai/sdk';
 import { getApiKey, getModelForAgent } from '../config/env';
 import { cacheService } from '../cache/redis';
@@ -346,10 +346,42 @@ export async function getAgentResponse(
           case 'gemini':
           default: {
             const genAI = getGeminiClient();
-            const model = genAI.getGenerativeModel({ model: modelName });
+            const model = genAI.getGenerativeModel({ 
+              model: modelName,
+              generationConfig: {
+                temperature: 0.7,
+                topK: 40,
+                topP: 0.95,
+                maxOutputTokens: 4096,
+              },
+              safetySettings: [
+                {
+                  category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+                  threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+                },
+                {
+                  category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, 
+                  threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+                },
+                {
+                  category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                  threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+                },
+                {
+                  category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                  threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+                },
+              ],
+            });
             
             const result = await model.generateContent(prompt);
             const response = await result.response;
+            
+            // Check if response was blocked
+            if (response.promptFeedback?.blockReason) {
+              throw new Error(`Content blocked: ${response.promptFeedback.blockReason}`);
+            }
+            
             return response.text();
           }
         }
@@ -357,8 +389,33 @@ export async function getAgentResponse(
       
       // Race between AI call and timeout
       text = await Promise.race([aiPromise, timeoutPromise]);
-    } catch (aiError) {
+    } catch (aiError: unknown) {
       console.error(`AI provider ${provider} failed:`, aiError);
+      
+      // Log specific error details for Gemini API issues
+      if (provider === 'gemini' || provider === 'default') {
+        const error = aiError as Error;
+        console.error('Gemini API Error Details:', {
+          message: error.message,
+          name: error.name,
+          stack: error.stack?.split('\n').slice(0, 3).join('\n') // First 3 lines of stack
+        });
+        
+        // Check for common Gemini API errors
+        if (error.message?.includes('API_KEY_INVALID')) {
+          throw new Error('Invalid Gemini API key. Please check your GEMINI_API_KEY environment variable.');
+        }
+        if (error.message?.includes('QUOTA_EXCEEDED')) {
+          throw new Error('Gemini API quota exceeded. Please check your usage limits in Google AI Studio.');
+        }
+        if (error.message?.includes('PERMISSION_DENIED')) {
+          throw new Error('Permission denied for Gemini API. Please check your API key permissions.');
+        }
+        if (error.message?.includes('BLOCKED')) {
+          throw new Error('Content was blocked by Gemini safety filters. Try rephrasing your request.');
+        }
+      }
+      
       throw aiError;
     }
 
@@ -568,7 +625,7 @@ Provide your synthesis in this exact format:
 **CONFIDENCE LEVEL:** [High/Medium/Low] - [Brief justification]`;
 
     const genAI = getGeminiClient();
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
     
     const result = await model.generateContent(synthesisPrompt);
     const response = await result.response;
