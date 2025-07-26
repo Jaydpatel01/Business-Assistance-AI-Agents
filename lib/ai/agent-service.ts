@@ -296,7 +296,7 @@ export async function getAgentResponse(
     
     if (includeRAG && sessionId) {
       try {
-        const ragData = await retrieveRelevantDocuments(context, agentType);
+        const ragData = await retrieveRelevantDocuments(context, agentType, undefined, undefined);
         ragContext = ragData.context;
         relevantDocuments = ragData.documents;
       } catch (ragError) {
@@ -305,7 +305,7 @@ export async function getAgentResponse(
       }
     }
     
-    const prompt = createEnhancedAgentPrompt(agentType, scenario, context, companyName, ragContext);
+    const prompt = createEnhancedAgentPrompt(agentType, scenario, context, companyName, ragContext, relevantDocuments);
     
     // Get AI provider from environment
     const provider = process.env.AI_PROVIDER || 'gemini';
@@ -494,79 +494,134 @@ export async function getAgentResponse(
   }
 }
 
-// Create enhanced agent prompt with RAG context
+// Create enhanced agent prompt with RAG context and source citations
 const createEnhancedAgentPrompt = (
   agentType: AgentType, 
   scenario: ScenarioData, 
   context: string, 
   companyName = "the company",
-  ragContext = ""
+  ragContext = "",
+  documents: RelevantDocument[] = []
 ) => {
   const basePrompt = createAgentPrompt(agentType, scenario, context, companyName);
   
-  if (ragContext) {
+  if (ragContext && documents.length > 0) {
+    // Create source map for citations
+    const sourceMap = documents.map((doc, index) => `[${index + 1}] ${doc.fileName}`).join('\n');
+    
     return `${basePrompt}
 
-RELEVANT DOCUMENTS & DATA:
+RELEVANT COMPANY DOCUMENTS:
 ${ragContext}
 
-ADDITIONAL INSTRUCTIONS:
-- Reference specific data points from the provided documents when relevant
-- Cite sources when making data-driven claims
-- Integrate document insights with your professional expertise
-- If documents contradict your assumptions, acknowledge and address this`;
+DOCUMENT SOURCES:
+${sourceMap}
+
+ENHANCED INSTRUCTIONS:
+- Base your analysis on the provided company documents above
+- Reference specific data points and findings from the documents
+- Use source citations like [1], [2], etc. when referencing specific documents
+- Provide document-backed insights that align with your ${agentProfiles[agentType].role} expertise
+- If documents provide contradictory information, acknowledge this and provide balanced analysis
+- Combine document insights with your professional knowledge for comprehensive recommendations
+- Prioritize document evidence over general assumptions
+- If the documents don't contain relevant information for your analysis, clearly state this
+
+RESPONSE FORMAT:
+1. Document-Based Analysis: [Your analysis using cited sources]
+2. Professional Insights: [Your expert perspective integrating document findings]
+3. Recommendations: [Actionable recommendations with source backing]`;
   }
   
   return basePrompt;
-};
+}
 
 // RAG document retrieval function
-async function retrieveRelevantDocuments(query: string, agentType: AgentType) {
+// RAG document retrieval function - Updated to use real RAG system
+async function retrieveRelevantDocuments(query: string, agentType: AgentType, userId?: string, organizationId?: string) {
   try {
-    // Generate query embeddings (placeholder implementation)
-    await generateEmbeddings(query);
+    // Import RAG search function
+    const { getRAGContext } = await import('../rag');
     
-    // Retrieve relevant documents from vector database
-    // This is a simplified implementation - in production you'd use a vector database
-    const mockRelevantDocuments: RelevantDocument[] = [
-      {
-        id: 'doc_1',
-        fileName: 'Q4_Financial_Report.pdf',
-        relevanceScore: 0.85,
-        excerpt: 'Financial performance shows 15% revenue growth with strong margin expansion...',
-        category: agentType === 'cfo' ? 'financial' : 'general'
-      },
-      {
-        id: 'doc_2', 
-        fileName: 'Strategic_Plan_2025.docx',
-        relevanceScore: 0.78,
-        excerpt: 'Strategic initiatives focus on market expansion and digital transformation...',
-        category: agentType === 'ceo' ? 'strategic' : 'general'
-      }
-    ];
+    // Configure search parameters based on agent type
+    const searchOptions = {
+      maxChunks: agentType === 'ceo' ? 7 : 5, // CEO gets more context for strategic decisions
+      minScore: agentType === 'cfo' ? 0.8 : 0.7, // CFO needs higher precision for financial data
+      maxContextLength: agentType === 'ceo' ? 4000 : 3000, // CEO gets longer context
+      userId,
+      organizationId,
+    };
+
+    console.log(`Retrieving relevant documents for ${agentType} with query: "${query.substring(0, 100)}..."`);
     
-    // Filter documents by agent type and relevance
-    const relevantDocs = mockRelevantDocuments
-      .filter(doc => doc.relevanceScore > 0.7)
-      .filter(doc => doc.category === agentType || doc.category === 'general')
-      .slice(0, 3); // Top 3 most relevant
+    // Get context from RAG system
+    const ragResult = await getRAGContext(query, searchOptions);
     
-    const ragContext = relevantDocs
-      .map(doc => `[${doc.fileName}]: ${doc.excerpt}`)
-      .join('\n\n');
+    // Convert RAG results to our format
+    const relevantDocuments: RelevantDocument[] = ragResult.sources.map((source, index) => ({
+      id: `rag_${index}`,
+      fileName: source.documentName,
+      relevanceScore: source.score,
+      excerpt: ragResult.context.split('\n\n')[index] || 'Document excerpt not available',
+      category: determineDocumentCategory(source.documentName, agentType),
+    }));
+
+    console.log(`Found ${relevantDocuments.length} relevant documents for ${agentType} agent`);
     
     return {
-      context: ragContext,
-      documents: relevantDocs
+      context: ragResult.context,
+      documents: relevantDocuments
     };
     
   } catch (error) {
     console.error('Error retrieving RAG documents:', error);
+    
+    // Fallback to limited mock data if RAG fails
+    console.log('Falling back to mock data due to RAG error');
+    const fallbackDoc: RelevantDocument = {
+      id: 'fallback_1',
+      fileName: 'System_Fallback.txt',
+      relevanceScore: 0.6,
+      excerpt: 'Note: Document retrieval system encountered an issue. Please ensure documents are uploaded and indexed.',
+      category: 'system'
+    };
+    
     return {
-      context: '',
-      documents: []
+      context: `[${fallbackDoc.fileName}]: ${fallbackDoc.excerpt}`,
+      documents: [fallbackDoc]
     };
   }
+}
+
+// Helper function to determine document category based on filename and agent type
+function determineDocumentCategory(fileName: string, agentType: AgentType): string {
+  const lowerFileName = fileName.toLowerCase();
+  
+  // Financial documents
+  if (lowerFileName.includes('financial') || lowerFileName.includes('budget') || 
+      lowerFileName.includes('revenue') || lowerFileName.includes('profit')) {
+    return agentType === 'cfo' ? 'primary' : 'secondary';
+  }
+  
+  // Strategic documents
+  if (lowerFileName.includes('strategy') || lowerFileName.includes('plan') || 
+      lowerFileName.includes('vision') || lowerFileName.includes('roadmap')) {
+    return agentType === 'ceo' ? 'primary' : 'secondary';
+  }
+  
+  // Technical documents
+  if (lowerFileName.includes('tech') || lowerFileName.includes('architecture') || 
+      lowerFileName.includes('development') || lowerFileName.includes('infrastructure')) {
+    return agentType === 'cto' ? 'primary' : 'secondary';
+  }
+  
+  // HR documents
+  if (lowerFileName.includes('hr') || lowerFileName.includes('employee') || 
+      lowerFileName.includes('talent') || lowerFileName.includes('culture')) {
+    return agentType === 'hr' ? 'primary' : 'secondary';
+  }
+  
+  return 'general';
 }
 
 // Embedding generation function (moved from documents route for reuse)
@@ -582,47 +637,83 @@ async function generateEmbeddings(_text: string): Promise<number[]> {
 }
 
 // Decision synthesis function
+// Decision synthesis function with enhanced RAG context integration
 export async function synthesizeDecision(agentResponses: AgentResponse[], scenario: ScenarioData) {
   try {
+    // Collect unique documents referenced across all agent responses
+    const allDocuments = new Map<string, { fileName: string; count: number; agents: string[] }>();
+    
+    agentResponses.forEach(response => {
+      if (response.relevantDocuments) {
+        response.relevantDocuments.forEach(doc => {
+          const key = doc.fileName;
+          if (allDocuments.has(key)) {
+            const existing = allDocuments.get(key)!;
+            existing.count++;
+            existing.agents.push(response.agentType);
+          } else {
+            allDocuments.set(key, {
+              fileName: doc.fileName,
+              count: 1,
+              agents: [response.agentType]
+            });
+          }
+        });
+      }
+    });
+
+    // Create document summary for synthesis context
+    const documentSummary = Array.from(allDocuments.entries())
+      .sort(([,a], [,b]) => b.count - a.count) // Sort by most referenced
+      .map(([, doc]) => `• ${doc.fileName} (referenced by: ${doc.agents.join(', ')})`)
+      .join('\n');
+
     const responseTexts = agentResponses.map(r => 
-      `**${r.agent.role}**: ${r.response}`
+      `**${r.agent.role}**: ${r.response}${r.relevantDocuments && r.relevantDocuments.length > 0 ? 
+        `\n[Documents referenced: ${r.relevantDocuments.map(d => d.fileName).join(', ')}]` : ''}`
     ).join('\n\n');
 
     const synthesisPrompt = `You are a senior strategy consultant analyzing executive perspectives on a business decision.
 
 SCENARIO: ${scenario.description}
 
+COMPANY DOCUMENTS CONSULTED:
+${documentSummary || 'No documents were referenced in this analysis.'}
+
 EXECUTIVE PERSPECTIVES:
 ${responseTexts}
 
-TASK: Synthesize these perspectives into a comprehensive decision recommendation.
+TASK: Synthesize these perspectives into a comprehensive decision recommendation that integrates both the document insights and executive expertise.
 
 Provide your synthesis in this exact format:
 
 **EXECUTIVE SUMMARY:**
-[2-3 sentence summary of the decision]
+[2-3 sentence summary of the decision incorporating document findings]
+
+**DOCUMENT-BACKED INSIGHTS:**
+[Key findings from company documents that inform this decision]
 
 **CONSENSUS AREAS:**
-- [Areas where executives agree]
+- [Areas where executives agree, supported by documentation where available]
 
 **KEY DISAGREEMENTS:**
-- [Areas of divergent opinions]
+- [Areas of divergent opinions and how documents support or contradict positions]
 
 **RECOMMENDED ACTION:**
-[Specific, actionable recommendation]
+[Specific, actionable recommendation with document and expert backing]
 
 **IMPLEMENTATION STEPS:**
-1. [Step 1 with timeline]
-2. [Step 2 with timeline]
-3. [Step 3 with timeline]
+1. [Step 1 with timeline and document support]
+2. [Step 2 with timeline and document support]  
+3. [Step 3 with timeline and document support]
 
 **RISK MITIGATION:**
-- [Key risks and how to address them]
+- [Key risks identified through both document analysis and executive expertise]
 
 **SUCCESS METRICS:**
-- [How to measure success]
+- [How to measure success based on document benchmarks and expert criteria]
 
-**CONFIDENCE LEVEL:** [High/Medium/Low] - [Brief justification]`;
+**CONFIDENCE LEVEL:** [High/Medium/Low] - [Brief justification based on document support and executive consensus]`;
 
     const genAI = getGeminiClient();
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
@@ -635,7 +726,9 @@ Provide your synthesis in this exact format:
       synthesis: text,
       timestamp: new Date().toISOString(),
       agentCount: agentResponses.length,
-      confidence: extractConfidenceLevel(text)
+      confidence: extractConfidenceLevel(text),
+      documentsReferenced: Array.from(allDocuments.keys()),
+      documentCount: allDocuments.size
     };
   } catch (error) {
     console.error('Error synthesizing decision:', error);

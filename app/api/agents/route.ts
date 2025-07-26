@@ -86,12 +86,16 @@ export async function POST(request: Request) {
 
     const sanitizedCompanyName = companyName ? sanitizeCompanyName(companyName) : undefined;
     
-    // Get agent response with sanitized inputs
+    // Get agent response with sanitized inputs and RAG enabled
+    const sessionId = `agent-${Date.now()}`;
     const response = await getAgentResponse(
       agentType as AgentType, 
       scenarioData, 
       contextSanitization.sanitized, 
-      sanitizedCompanyName
+      sanitizedCompanyName,
+      false, // useDemoData
+      true,  // includeRAG - Enable RAG for document-informed responses
+      sessionId
     );
     
     return NextResponse.json({

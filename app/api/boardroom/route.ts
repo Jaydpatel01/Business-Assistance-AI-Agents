@@ -66,7 +66,7 @@ export async function POST(request: Request) {
     
     // Validate request body
     const validatedData = BoardroomRequestSchema.parse(body);
-    const { scenario, query, includeAgents, companyName, sessionId } = validatedData;
+    const { scenario, query, includeAgents, companyName, sessionId: userSessionId } = validatedData;
     
     // 🔒 SECURITY: Sanitize scenario data and cast to proper type
     const sanitizedScenario = sanitizeScenario(scenario);
@@ -106,9 +106,18 @@ export async function POST(request: Request) {
     // Build context from sanitized query
     const context = `User Query: ${queryResult.sanitized}`;
     
-    // Get responses from all requested agents in parallel
+    // Get responses from all requested agents in parallel with RAG enabled
+    const sessionId = userSessionId || `brd-${Date.now()}`;
     const agentPromises = includeAgents.map(agentType =>
-      getAgentResponse(agentType as AgentType, scenarioData, context, companyName)
+      getAgentResponse(
+        agentType as AgentType, 
+        scenarioData, 
+        context, 
+        companyName,
+        false, // useDemoData
+        true,  // includeRAG - Enable RAG for document-informed responses
+        sessionId
+      )
         .catch(error => ({
           error: true,
           agentType,
