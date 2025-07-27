@@ -1,4 +1,4 @@
-import { getAgentResponse, agentProfiles, type AgentType } from '@/lib/ai/agent-service';
+import { getAgentResponse, streamAgentResponse, agentProfiles, type AgentType } from '@/lib/ai/agent-service';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getServerSession } from 'next-auth';
@@ -16,7 +16,7 @@ const AgentRequestSchema = z.object({
   scenario: z.object({
     id: z.string().optional(),
     name: z.string().min(1).max(200),
-    description: z.string().min(1).max(2000),
+    description: z.string().max(2000).optional().default('General business discussion'), // Make optional with default
     parameters: z.record(z.any()).optional(),
   }),
   context: z.string().min(1).max(5000), // Add length limits
@@ -24,6 +24,71 @@ const AgentRequestSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const wantsStream = searchParams.get('stream') === 'true' || request.headers.get('accept') === 'text/event-stream';
+
+  if (wantsStream) {
+    // Streaming mode (SSE)
+    const encoder = new TextEncoder();
+    const body = await request.json();
+    // Validate request body
+    const validatedData = AgentRequestSchema.parse(body);
+    const { agentType, scenario, context, companyName } = validatedData;
+    // Sanitize inputs
+    const contextSanitization = sanitizeForPrompt(context);
+    if (contextSanitization.blocked) {
+      return new Response('data: [BLOCKED]\n\n', { status: 400, headers: { 'Content-Type': 'text/event-stream' } });
+    }
+    const sanitizedScenario = sanitizeScenario(scenario);
+    if (!sanitizedScenario) {
+      return new Response('data: [INVALID_SCENARIO]\n\n', { status: 400, headers: { 'Content-Type': 'text/event-stream' } });
+    }
+    const scenarioData = {
+      id: sanitizedScenario.id as string | undefined,
+      name: sanitizedScenario.name as string,
+      description: sanitizedScenario.description as string,
+      parameters: sanitizedScenario.parameters as Record<string, unknown> | undefined
+    };
+    const sanitizedCompanyName = companyName ? sanitizeCompanyName(companyName) : undefined;
+    // Extract userId and organizationId from session
+    const session = await getServerSession(authOptions);
+    const userId = session?.user?.id;
+    const organizationId = session?.user?.company || undefined;
+    const sessionId = `agent-${Date.now()}`;
+    // Use the streaming generator
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const token of streamAgentResponse(
+            agentType as AgentType,
+            scenarioData,
+            contextSanitization.sanitized,
+            sanitizedCompanyName,
+            false,
+            true,
+            sessionId,
+            userId,
+            organizationId
+          )) {
+            controller.enqueue(encoder.encode(`data: ${token}\n\n`));
+          }
+          controller.close();
+        } catch (err) {
+          console.error('Streaming error:', err);
+          controller.enqueue(encoder.encode(`data: [ERROR]\n\n`));
+          controller.close();
+        }
+      }
+    });
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
+    });
+  }
+
   try {
     // 🔒 SECURITY: Check authentication
     const session = await getServerSession(authOptions);
@@ -86,6 +151,10 @@ export async function POST(request: Request) {
 
     const sanitizedCompanyName = companyName ? sanitizeCompanyName(companyName) : undefined;
     
+    // Extract userId and organizationId from session
+    const userId = session.user?.id;
+    const organizationId = session.user?.company || undefined;
+
     // Get agent response with sanitized inputs and RAG enabled
     const sessionId = `agent-${Date.now()}`;
     const response = await getAgentResponse(
@@ -95,7 +164,9 @@ export async function POST(request: Request) {
       sanitizedCompanyName,
       false, // useDemoData
       true,  // includeRAG - Enable RAG for document-informed responses
-      sessionId
+      sessionId,
+      userId,
+      organizationId
     );
     
     return NextResponse.json({

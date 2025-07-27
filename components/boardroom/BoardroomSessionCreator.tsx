@@ -66,8 +66,17 @@ export function BoardroomSessionCreator() {
 
   useEffect(() => {
     const loadScenario = async (id: string) => {
+      // Handle the specific case of scenario ID "1" which seems to be a bug
+      if (id === "1") {
+        console.warn('⚠️ Detected invalid scenario ID "1", redirecting to scenarios page');
+        alert('Invalid scenario ID detected. Please select a valid scenario from the list.');
+        window.location.href = '/scenarios';
+        return;
+      }
+      
       setIsLoadingScenario(true)
       try {
+        console.log(`🔍 Loading scenario: ${id}`);
         const response = await fetch(`/api/scenarios/${id}`)
         if (response.ok) {
           const result = await response.json()
@@ -75,9 +84,36 @@ export function BoardroomSessionCreator() {
           setScenario(scenarioData)
           setSessionName(`${scenarioData.name} - AI Discussion`)
           setSessionDescription(`AI boardroom discussion for: ${scenarioData.description}`)
+          console.log(`✅ Loaded scenario: ${scenarioData.name}`);
+        } else {
+          const errorData = await response.json();
+          console.error('Failed to load scenario:', errorData);
+          
+          // Show user-friendly error with available options
+          const availableIds = errorData.availableIds || [];
+          const message = `Scenario "${id}" not found. Available scenarios:\n${availableIds.join(', ')}\n\nYou can start a session without selecting a specific scenario.`;
+          
+          if (confirm(message + '\n\nWould you like to continue without a predefined scenario?')) {
+            // User chose to continue without scenario
+            setScenario(null);
+            setSessionName('Custom AI Discussion');
+            setSessionDescription('Custom boardroom discussion session');
+          } else {
+            // Redirect to scenarios page to select a valid one
+            window.location.href = '/scenarios';
+          }
         }
       } catch (error) {
         console.error('Failed to load scenario:', error)
+        const message = `Error loading scenario "${id}". You can start a session without selecting a specific scenario.`;
+        
+        if (confirm(message + '\n\nWould you like to continue without a predefined scenario?')) {
+          setScenario(null);
+          setSessionName('Custom AI Discussion');
+          setSessionDescription('Custom boardroom discussion session');
+        } else {
+          window.location.href = '/scenarios';
+        }
       } finally {
         setIsLoadingScenario(false)
       }

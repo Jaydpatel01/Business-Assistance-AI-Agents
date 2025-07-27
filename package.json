@@ -13,7 +13,8 @@
     "analyze": "cross-env ANALYZE=true npm run build",
     "build:analyze": "cross-env ANALYZE=true npm run build",
     "build:prod": "npm run type-check && npm run lint && npm run build",
-    "clean": "cross-env rimraf .next"
+    "clean": "cross-env rimraf .next",
+    "check:deadcode": "ts-unused-exports ."
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.57.0",

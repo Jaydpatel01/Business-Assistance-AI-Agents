@@ -58,11 +58,19 @@ export function SummaryBox({ sessionId }: SummaryBoxProps) {
 
   const handleCopySummary = async () => {
     try {
-      await navigator.clipboard.writeText(mockSummary)
-      toast({
-        title: "Summary copied",
-        description: "The summary has been copied to your clipboard.",
-      })
+      if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        await navigator.clipboard.writeText(mockSummary)
+        toast({
+          title: "Summary copied",
+          description: "The summary has been copied to your clipboard.",
+        })
+      } else {
+        toast({
+          title: "Copy not supported",
+          description: "Clipboard access is not available.",
+          variant: "destructive"
+        })
+      }
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (error) {
       toast({

@@ -8,7 +8,11 @@ import { Input } from "@/components/ui/input"
 import { SearchDialog } from "@/components/search-dialog"
 import { NotificationsDialog } from "@/components/notifications-dialog"
 import { SimpleMonitoringControls } from "@/components/ui/monitoring-controls"
+import { HelpSystem } from "@/components/user-experience/help-system"
+import { KeyboardShortcuts } from "@/components/user-experience/keyboard-shortcuts"
+import { PerformanceDashboard } from "@/components/user-experience/performance-dashboard"
 import { Badge } from "@/components/ui/badge"
+import { Separator } from "@/components/ui/separator"
 import Link from "next/link"
 import { useState } from "react"
 
@@ -42,10 +46,21 @@ export function Header() {
               className="pl-10 cursor-pointer"
               readOnly
             />
+            <Badge variant="outline" className="absolute right-3 top-1/2 -translate-y-1/2 text-xs hidden md:inline">
+              Ctrl K
+            </Badge>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
+          {/* User Experience Tools */}
+          <div className="hidden lg:flex items-center gap-1">
+            <HelpSystem />
+            <KeyboardShortcuts />
+            <PerformanceDashboard />
+            <Separator orientation="vertical" className="h-4" />
+          </div>
+
           {/* AI Status Indicator */}
           <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-muted rounded-full">
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />

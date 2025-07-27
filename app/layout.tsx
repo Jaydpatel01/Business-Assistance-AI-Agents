@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
 import { Providers } from "@/components/providers"
+import { ClientLayoutWrapper } from "@/components/client-layout-wrapper"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -64,7 +65,9 @@ export default function RootLayout({
       <body className={`${inter.className} antialiased min-h-screen`}>
         <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
           <Providers>
-            {children}
+            <ClientLayoutWrapper>
+              {children}
+            </ClientLayoutWrapper>
           </Providers>
         </div>
       </body>

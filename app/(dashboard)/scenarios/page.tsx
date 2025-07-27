@@ -19,15 +19,35 @@ export default function ScenariosPage() {
     fetchScenarios()
   }, [fetchScenarios])
 
+  // Debug logging
+  useEffect(() => {
+    if (scenarios.length > 0) {
+      console.log('🔍 Scenarios received in UI:');
+      console.log('   - Total scenarios:', scenarios.length);
+      console.log('   - Scenario IDs:', scenarios.map(s => s.id));
+      console.log('   - Raw scenarios:', scenarios);
+    }
+  }, [scenarios])
+
   // Convert API scenario to ScenarioCard format
-  const convertScenarioForCard = (scenario: Scenario) => ({
-    id: scenario.id,
-    title: scenario.name,
-    status: "Draft" as const, // Default status since API doesn't have this field
-    createdDate: scenario.createdAt ? new Date(scenario.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-    description: scenario.description || "",
-    industry: scenario.tags?.[0] || "General",
-  })
+  const convertScenarioForCard = (scenario: Scenario) => {
+    const converted = {
+      id: scenario.id,
+      title: scenario.name,
+      status: "Draft" as const, // Default status since API doesn't have this field
+      createdDate: scenario.createdAt ? new Date(scenario.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      description: scenario.description || "",
+      industry: scenario.tags?.[0] || "General",
+    };
+    
+    // Debug log the conversion
+    console.log('🔄 Converting scenario:', {
+      original: { id: scenario.id, name: scenario.name },
+      converted: { id: converted.id, title: converted.title }
+    });
+    
+    return converted;
+  }
 
   // Filter scenarios based on search and filters
   const filteredScenarios = scenarios.filter((scenario) => {
@@ -38,6 +58,11 @@ export default function ScenariosPage() {
     
     return matchesSearch && matchesIndustry
   }).map(convertScenarioForCard)
+
+  // Ensure unique scenarios by ID (safeguard against API duplicates)
+  const uniqueScenarios = filteredScenarios.filter((scenario, index, self) => 
+    self.findIndex(s => s.id === scenario.id) === index
+  )
 
   if (error) {
     return (
@@ -107,7 +132,7 @@ export default function ScenariosPage() {
           <Loader2 className="h-8 w-8 animate-spin" />
           <span className="ml-2">Loading scenarios...</span>
         </div>
-      ) : filteredScenarios.length === 0 ? (
+      ) : uniqueScenarios.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-muted-foreground">No scenarios found</p>
           {scenarios.length === 0 && (
@@ -120,7 +145,7 @@ export default function ScenariosPage() {
         </div>
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {filteredScenarios.map((scenario) => (
+          {uniqueScenarios.map((scenario) => (
             <ScenarioCard key={scenario.id} scenario={scenario} />
           ))}
         </div>

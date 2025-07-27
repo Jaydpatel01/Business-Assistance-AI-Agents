@@ -77,6 +77,8 @@ export async function GET(
 ) {
   const { id } = await params
   try {
+    console.log(`🔍 Fetching scenario with ID: "${id}"`);
+    
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return NextResponse.json(
@@ -87,8 +89,10 @@ export async function GET(
 
     // Look for predefined scenario first
     const predefinedScenario = PREDEFINED_SCENARIOS.find(s => s.id === id);
+    console.log(`📋 Available predefined scenario IDs:`, PREDEFINED_SCENARIOS.map(s => s.id));
     
     if (predefinedScenario) {
+      console.log(`✅ Found predefined scenario: ${predefinedScenario.name}`);
       const formattedScenario = formatScenarioForAPI(
         predefinedScenario, 
         session.user.id, 
@@ -104,15 +108,25 @@ export async function GET(
 
     // If not found in predefined scenarios, check mock scenarios for backward compatibility
     const mockScenarios = getMockScenarios(session.user.id);
+    console.log(`🧪 Available mock scenario IDs:`, mockScenarios.map(s => s.id));
     const scenario = mockScenarios.find(s => s.id === id);
 
     if (!scenario) {
+      console.log(`❌ Scenario "${id}" not found in predefined or mock scenarios`);
       return NextResponse.json(
-        { success: false, error: 'Scenario not found' },
+        { 
+          success: false, 
+          error: `Scenario not found: "${id}"`,
+          availableIds: [
+            ...PREDEFINED_SCENARIOS.map(s => s.id),
+            ...mockScenarios.map(s => s.id)
+          ]
+        },
         { status: 404 }
       );
     }
 
+    console.log(`✅ Found mock scenario: ${scenario.name}`);
     return NextResponse.json({
       success: true,
       data: scenario,

@@ -1,6 +1,6 @@
 "use client"
 
-import { Brain, LayoutDashboard, FileText, Users, ClipboardList, Settings, BarChart3, Upload, Bot } from "lucide-react"
+import { Brain, LayoutDashboard, FileText, Users, ClipboardList, Settings, BarChart3, Upload, Bot, Sparkles } from "lucide-react"
 import {
   Sidebar,
   SidebarContent,
@@ -50,6 +50,16 @@ const items = [
     title: "Documents",
     url: "/documents",
     icon: Upload,
+  },
+  {
+    title: "User Experience",
+    url: "/user-experience",
+    icon: Sparkles,
+  },
+  {
+    title: "Explainability",
+    url: "/explainability",
+    icon: Brain,
   },
   {
     title: "Agents",

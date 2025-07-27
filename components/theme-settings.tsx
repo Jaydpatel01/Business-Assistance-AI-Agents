@@ -39,7 +39,9 @@ export function ThemeSettings() {
 
   const handleExport = () => {
     const data = exportPreferences()
-    navigator.clipboard.writeText(data)
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(data)
+    }
     // You could show a toast here
   }
 

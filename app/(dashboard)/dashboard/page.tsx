@@ -10,7 +10,7 @@ import Link from "next/link"
 
 const scenarios = [
   {
-    id: "1",
+    id: "strategic-investment-analysis",
     title: "Q4 Strategic Investment Review",
     status: "In Progress" as const,
     createdDate: "2024-01-15",
@@ -21,7 +21,7 @@ const scenarios = [
     lastActivity: "2 hours ago",
   },
   {
-    id: "2",
+    id: "workforce-planning-restructuring",
     title: "Remote Work Policy 2025",
     status: "Draft" as const,
     createdDate: "2024-01-14",
@@ -32,7 +32,7 @@ const scenarios = [
     lastActivity: "1 day ago",
   },
   {
-    id: "3",
+    id: "market-expansion-strategy",
     title: "Market Expansion - APAC Region",
     status: "Completed" as const,
     createdDate: "2024-01-10",
@@ -43,7 +43,7 @@ const scenarios = [
     lastActivity: "3 days ago",
   },
   {
-    id: "4",
+    id: "cost-optimization-initiative",
     title: "Cost Optimization Initiative",
     status: "Scheduled" as const,
     createdDate: "2024-01-12",

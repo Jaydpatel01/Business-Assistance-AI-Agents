@@ -243,7 +243,9 @@ export async function getAgentResponse(
   companyName?: string,
   useDemoData?: boolean,
   includeRAG?: boolean,
-  sessionId?: string
+  sessionId?: string,
+  userId?: string,
+  organizationId?: string
 ): Promise<AgentResponse> {
   try {
     // If demo data is explicitly requested, return demo response immediately
@@ -313,7 +315,7 @@ export async function getAgentResponse(
     
     if (includeRAG && sessionId) {
       try {
-        const ragData = await retrieveRelevantDocuments(context, agentType, undefined, undefined);
+        const ragData = await retrieveRelevantDocuments(context, agentType, userId, organizationId);
         ragContext = ragData.context;
         relevantDocuments = ragData.documents;
       } catch (ragError) {
@@ -1033,4 +1035,85 @@ Provide your synthesis in this exact format:
 function extractConfidenceLevel(text: string): 'High' | 'Medium' | 'Low' {
   const confidenceMatch = text.match(/\*\*CONFIDENCE LEVEL:\*\*\s*(High|Medium|Low)/i);
   return (confidenceMatch?.[1] as 'High' | 'Medium' | 'Low') || 'Medium';
+}
+
+// Streaming agent response for Gemini
+export async function* streamAgentResponse(
+  agentType: AgentType,
+  scenario: ScenarioData,
+  context: string,
+  companyName?: string,
+  useDemoData?: boolean,
+  includeRAG?: boolean,
+  sessionId?: string,
+  userId?: string,
+  organizationId?: string
+): AsyncGenerator<string, void, void> {
+  // For demo mode, just yield the demo response in one chunk
+  if (useDemoData) {
+    yield demoResponses[agentType];
+    return;
+  }
+
+  // Build the enhanced prompt (reuse logic from getAgentResponse)
+  let ragContext = '';
+  let relevantDocuments: RelevantDocument[] = [];
+  if (includeRAG && sessionId) {
+    try {
+      const ragData = await retrieveRelevantDocuments(context, agentType, userId, organizationId);
+      ragContext = ragData.context;
+      relevantDocuments = ragData.documents;
+    } catch (ragError) {
+      // Continue without RAG context
+    }
+  }
+  let marketData: MarketIntelligence | null = null;
+  if (includeRAG) {
+    try {
+      marketData = await retrieveMarketIntelligence(agentType);
+    } catch {}
+  }
+  let memoryAdvice = '';
+  try {
+    memoryAdvice = await memoryService.generateContextualAdvice(agentType, `${scenario.name}: ${context}`);
+  } catch {}
+  const prompt = createEnhancedAgentPrompt(agentType, scenario, context, companyName, ragContext, relevantDocuments, marketData, memoryAdvice);
+
+  // Only Gemini streaming is implemented for now
+  const provider = process.env.AI_PROVIDER || 'gemini';
+  if (provider !== 'gemini') {
+    // Fallback: yield the full response from getAgentResponse
+    const full = await getAgentResponse(agentType, scenario, context, companyName, useDemoData, includeRAG, sessionId, userId, organizationId);
+    yield full.response;
+    return;
+  }
+
+  // Gemini streaming
+  const genAI = getGeminiClient(agentType);
+  const model = genAI.getGenerativeModel({
+    model: getModelForAgent(agentType),
+    generationConfig: {
+      temperature: 0.7,
+      topK: 40,
+      topP: 0.95,
+      maxOutputTokens: 4096,
+    },
+    safetySettings: [
+      { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+      { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+      { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+      { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+    ],
+  });
+  const streamResult = await model.generateContentStream(prompt);
+  for await (const chunk of streamResult.stream) {
+    // Each chunk may contain multiple candidates/parts
+    for (const candidate of chunk.candidates || []) {
+      for (const part of candidate.content?.parts || []) {
+        if (typeof part.text === 'string') {
+          yield part.text;
+        }
+      }
+    }
+  }
 }

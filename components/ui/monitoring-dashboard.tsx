@@ -74,6 +74,11 @@ export function StableMonitoringDashboard({ isVisible, onToggle }: StableMonitor
 
   // Stable update function with throttling to prevent infinite re-renders
   const updateMetrics = useCallback(() => {
+    // Skip if running on server-side (SSR)
+    if (typeof navigator === 'undefined' || typeof window === 'undefined') {
+      return;
+    }
+
     const now = Date.now();
     // Only update if at least 10 seconds have passed since last update
     if (now - lastUpdateRef.current < 10000) return;

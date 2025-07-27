@@ -150,11 +150,19 @@ export function DecisionSummary({ sessionId }: DecisionSummaryProps) {
 
   const handleCopySummary = async () => {
     try {
-      await navigator.clipboard.writeText(executiveDecisionSummary)
-      toast({
-        title: "Decision summary copied",
-        description: "The executive decision summary has been copied to your clipboard.",
-      })
+      if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        await navigator.clipboard.writeText(executiveDecisionSummary)
+        toast({
+          title: "Decision summary copied",
+          description: "The executive decision summary has been copied to your clipboard.",
+        })
+      } else {
+        toast({
+          title: "Copy not supported",
+          description: "Clipboard access is not available.",
+          variant: "destructive"
+        })
+      }
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (error) {
       toast({

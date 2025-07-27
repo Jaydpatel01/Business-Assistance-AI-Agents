@@ -63,7 +63,7 @@ const priorityConfig = {
 }
 
 export function ScenarioCard({ scenario }: ScenarioCardProps) {
-  const statusStyle = statusConfig[scenario.status]
+  const statusStyle = statusConfig[scenario.status] || statusConfig.Draft
   const priorityStyle = scenario.priority ? priorityConfig[scenario.priority as keyof typeof priorityConfig] : null
 
   return (

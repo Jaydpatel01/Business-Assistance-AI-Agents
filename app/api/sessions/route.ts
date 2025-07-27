@@ -162,13 +162,14 @@ export async function GET(request: Request) {
       } catch (dbError) {
         console.error('Database error fetching sessions:', dbError);
         
-        // Fallback to empty array with helpful message for new users
+        const errorMessage = dbError instanceof Error ? dbError.message : 'Unknown database error';
+        
+        // Return proper error instead of fallback
         return NextResponse.json({
-          success: true,
-          data: [],
-          message: 'No sessions found. Create your first session to get started!',
-          error: 'Database temporarily unavailable'
-        });
+          success: false,
+          error: 'Failed to fetch sessions due to database error. Please try again.',
+          details: process.env.NODE_ENV === 'development' ? errorMessage : undefined
+        }, { status: 500 });
       }
     }
 
@@ -197,6 +198,28 @@ export async function POST(request: Request) {
     const userId = session.user.id;
 
     try {
+      // First, check if scenario exists in database
+      const scenario = await prisma.scenario.findUnique({
+        where: { id: validatedData.scenarioId }
+      });
+      
+      // If scenario doesn't exist in database, check if it's a predefined scenario
+      if (!scenario) {
+        const { getPredefinedScenarios } = await import('@/lib/scenarios/predefined-scenarios');
+        const predefinedScenarios = getPredefinedScenarios();
+        const predefinedScenario = predefinedScenarios.find(s => s.id === validatedData.scenarioId);
+        
+        if (predefinedScenario) {
+          console.log(`📋 Using predefined scenario ${validatedData.scenarioId} (not saving to database)`);
+          // Don't save predefined scenarios to database to avoid duplicates
+        } else {
+          return NextResponse.json(
+            { success: false, error: `Scenario with ID "${validatedData.scenarioId}" not found` },
+            { status: 400 }
+          );
+        }
+      }
+
       // Create session in database
       const newSession = await prisma.boardroomSession.create({
         data: {
@@ -261,38 +284,31 @@ export async function POST(request: Request) {
     } catch (dbError) {
       console.error('Database error creating session:', dbError);
       
-      // Fallback to mock session creation
-      const mockSession = {
-        id: `session-${Date.now()}`,
-        name: validatedData.name,
-        scenario: {
-          id: validatedData.scenarioId,
-          name: 'Selected Scenario',
-          description: 'Scenario details will be loaded from database'
-        },
-        status: 'active',
-        participants: [
-          { 
-            user: { 
-              name: session.user.name || 'User', 
-              email: session.user.email || 'user@example.com' 
-            }, 
-            role: 'facilitator' 
-          }
-        ],
-        includeAgents: validatedData.includeAgents,
-        createdAt: new Date(),
-        startedAt: new Date(),
-        messageCount: 0,
-        decisionCount: 0
-      };
+      const errorMessage = dbError instanceof Error ? dbError.message : 'Unknown database error';
+      
+      // Check if it's a specific database constraint error
+      if (errorMessage.includes('Foreign key constraint')) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid scenario ID. Please select a valid scenario.' },
+          { status: 400 }
+        );
+      }
+      if (errorMessage.includes('Unique constraint')) {
+        return NextResponse.json(
+          { success: false, error: 'A session with this name already exists. Please choose a different name.' },
+          { status: 400 }
+        );
+      }
 
-      return NextResponse.json({
-        success: true,
-        data: mockSession,
-        message: 'Session created (database temporarily unavailable)',
-        warning: 'Session may not persist - please try again later'
-      });
+      // Generic database error - don't fallback to mock, provide real error
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Failed to create session due to database error. Please try again.',
+          details: process.env.NODE_ENV === 'development' ? errorMessage : undefined
+        },
+        { status: 500 }
+      );
     }
 
   } catch (error) {

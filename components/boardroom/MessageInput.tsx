@@ -58,9 +58,11 @@ export function MessageInput({
     }
   }, [isDemoUser, isNewSession, sessionData?.scenario?.id, inputMessage, onAgentsChange])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (inputMessage.trim() && !isLoading && !disabled) {
+      // Just send the message directly to the parent component
+      // The parent will handle the streaming discussion
       onSendMessage(inputMessage.trim())
       setInputMessage("")
     }

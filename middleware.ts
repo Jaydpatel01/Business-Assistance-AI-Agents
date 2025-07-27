@@ -1,11 +1,20 @@
 import { withAuth } from "next-auth/middleware"
 import { NextResponse } from "next/server"
+import { applyRateLimit, applySecurityHeaders } from "@/lib/security/rate-limiting"
 
 export default withAuth(
-  function middleware() {
-    // Add custom middleware logic here if needed
-    // For now, just let the request pass through
-    return NextResponse.next()
+  async function middleware(req) {
+    // Apply rate limiting
+    const rateLimitResponse = await applyRateLimit(req);
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
+
+    // Continue with normal processing
+    const response = NextResponse.next();
+    
+    // Apply security headers
+    return applySecurityHeaders(response);
   },
   {
     callbacks: {

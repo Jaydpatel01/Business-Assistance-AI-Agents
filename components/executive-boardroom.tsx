@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useCallback } from "react"
 import { BoardroomHeader } from "@/components/boardroom/BoardroomHeader"
-import { MessageList } from "@/components/boardroom/MessageList"
+import { StreamingMessageList } from "@/components/boardroom/StreamingMessageList"
 import { MessageInput } from "@/components/boardroom/MessageInput"
 import { AgentSelector } from "@/components/boardroom/AgentSelector"
 import { BoardroomProgress } from "@/components/boardroom/BoardroomProgress"
@@ -11,8 +11,11 @@ import { DocumentSelector } from "@/components/boardroom/DocumentSelector"
 import DecisionSupport from "@/components/decision/DecisionSupport"
 import { DecisionRecommendation } from "@/lib/ai/decision-engine"
 import { LiveParticipants } from "@/components/live-participants"
+import { useStreamingBoardroom } from "@/hooks/use-streaming-boardroom"
 import { useBoardroomSession } from "@/hooks/useBoardroomSession"
 import { ExecutiveRole } from "@/types/executive"
+import { Button } from "@/components/ui/button"
+import { StopCircle } from "lucide-react"
 
 interface ExecutiveBoardroomProps {
   sessionId: string
@@ -54,15 +57,26 @@ export function ExecutiveBoardroom({ sessionId }: ExecutiveBoardroomProps) {
   const [selectedDocuments, setSelectedDocuments] = useState<string[]>([])
   const [isAnalyzingDecision, setIsAnalyzingDecision] = useState(false)
   const [decisionRecommendation, setDecisionRecommendation] = useState<DecisionRecommendation | null>(null)
+  const [selectedAgents, setSelectedAgents] = useState<string[]>([ExecutiveRole.CEO, ExecutiveRole.CFO])
   
   const {
     sessionData,
-    selectedAgents,
-    isProcessing,
-    sendMessage,
-    toggleAgent,
     exportSummary
   } = useBoardroomSession({ sessionId })
+
+  // Use streaming boardroom hook
+  const {
+    state: streamingState,
+    startStreamingDiscussion,
+    stopStreaming,
+  } = useStreamingBoardroom({
+    onMessageComplete: (message) => {
+      console.log('Message completed:', message)
+    },
+    onSessionComplete: (sessionId) => {
+      console.log('Session completed:', sessionId)
+    }
+  })
 
   // Function to analyze decision with AI
   const handleDecisionAnalysis = useCallback(async () => {
@@ -103,23 +117,62 @@ export function ExecutiveBoardroom({ sessionId }: ExecutiveBoardroomProps) {
     avatar: undefined
   }), [])
 
-  // Calculate progress data
-  const progressData = useMemo(() => ({
-    progress: sessionData.progress,
-    activeAgents: selectedAgents,
-    completedSteps: sessionData.progress > 50 ? ['initialization', 'agent_analysis'] : ['initialization'],
-    currentStep: sessionData.progress < 25 ? 'initialization' 
-                : sessionData.progress < 50 ? 'agent_analysis'
-                : sessionData.progress < 75 ? 'discussion'
-                : sessionData.progress < 95 ? 'synthesis'
-                : 'summary'
-  }), [sessionData.progress, selectedAgents])
+  // Calculate progress data based on streaming state
+  const progressData = useMemo(() => {
+    const messageCount = streamingState.messages.length
+    const completedAgentMessages = streamingState.messages.filter(msg => 
+      msg.agentType !== 'user' && msg.isComplete
+    ).length
+    
+    const progress = messageCount > 0 ? Math.min((completedAgentMessages / selectedAgents.length) * 100, 100) : 0
+    
+    return {
+      progress,
+      activeAgents: selectedAgents,
+      completedSteps: progress > 50 ? ['initialization', 'agent_analysis'] : ['initialization'],
+      currentStep: progress < 25 ? 'initialization' 
+                  : progress < 50 ? 'agent_analysis'
+                  : progress < 75 ? 'discussion'
+                  : progress < 95 ? 'synthesis'
+                  : 'summary'
+    }
+  }, [streamingState.messages, selectedAgents])
 
-  // Wrapper function to include selected documents when sending messages
-  const handleSendMessage = useCallback((message: string) => {
-    // TODO: Implement document context support in sendMessage hook
-    return sendMessage(message)
-  }, [sendMessage])
+  // Remove unused variables and fix TypeScript errors
+  const handleAgentToggle = useCallback((agentId: string) => {
+    setSelectedAgents(prev => 
+      prev.includes(agentId) 
+        ? prev.filter(id => id !== agentId)
+        : [...prev, agentId]
+    )
+  }, [])
+
+  // Wrapper function to start streaming discussion
+  const handleSendMessage = useCallback(async (message: string) => {
+    if (selectedAgents.length === 0) {
+      return
+    }
+
+    // Build conversation history from current messages
+    const conversationHistory = streamingState.messages
+      .filter(msg => msg.agentType !== 'user' && msg.agentType !== 'system' && msg.isComplete)
+      .map(msg => ({
+        agentType: msg.agentType,
+        content: msg.content,
+        timestamp: msg.timestamp.toISOString()
+      }))
+
+    await startStreamingDiscussion({
+      scenario: sessionData.scenario,
+      query: message,
+      includeAgents: selectedAgents,
+      sessionId: sessionId,
+      selectedDocuments,
+      conversationHistory,
+      maxRounds: 3, // Allow up to 3 rounds of discussion
+      autoConclusion: true // Enable auto-conclusion when agents reach recommendations
+    })
+  }, [selectedAgents, streamingState.messages, startStreamingDiscussion, sessionData.scenario, sessionId, selectedDocuments])
 
   return (
     <div className="container mx-auto py-6 space-y-6">
@@ -129,11 +182,11 @@ export function ExecutiveBoardroom({ sessionId }: ExecutiveBoardroomProps) {
         sessionName={sessionData.name}
         scenarioName={sessionData.scenario.name}
         scenarioDescription={sessionData.scenario.description}
-        status={sessionData.status as 'preparing' | 'active' | 'completed' | 'paused'}
+        status={'active' as 'preparing' | 'active' | 'completed' | 'paused'}
         startTime={new Date()}
-        participantCount={sessionData.activeAgents.length}
-        messageCount={sessionData.messages.length}
-        progress={sessionData.progress}
+        participantCount={selectedAgents.length}
+        messageCount={streamingState.messages.length}
+        progress={progressData.progress}
         onExport={exportSummary}
       />
 
@@ -144,16 +197,30 @@ export function ExecutiveBoardroom({ sessionId }: ExecutiveBoardroomProps) {
           <AgentSelector
             agents={EXECUTIVE_AGENTS}
             selectedAgents={selectedAgents}
-            onAgentToggle={toggleAgent}
-            disabled={isProcessing}
+            onAgentToggle={handleAgentToggle}
+            disabled={streamingState.isStreaming}
           />
 
-          {/* Message List */}
-          <MessageList
-            messages={sessionData.messages}
-            agents={EXECUTIVE_AGENTS}
-            isLoading={isProcessing}
+          {/* Message List - Streaming */}
+          <StreamingMessageList
+            messages={streamingState.messages}
+            currentAgent={streamingState.currentAgent}
+            isStreaming={streamingState.isStreaming}
           />
+
+          {/* Stop Streaming Button */}
+          {streamingState.isStreaming && (
+            <div className="flex justify-center">
+              <Button
+                onClick={stopStreaming}
+                variant="outline"
+                className="flex items-center gap-2"
+              >
+                <StopCircle className="h-4 w-4" />
+                Stop Discussion
+              </Button>
+            </div>
+          )}
 
           {/* Document Context - Show when available */}
           {sessionData.documentContext && sessionData.documentContext.documentsUsed > 0 && (
@@ -178,11 +245,13 @@ export function ExecutiveBoardroom({ sessionId }: ExecutiveBoardroomProps) {
           {/* Message Input */}
           <MessageInput
             onSendMessage={handleSendMessage}
-            isLoading={isProcessing}
+            isLoading={streamingState.isStreaming}
             disabled={selectedAgents.length === 0}
             placeholder={
               selectedAgents.length === 0 
                 ? "Please select at least one executive agent first..."
+                : streamingState.isStreaming
+                ? "Discussion in progress..."
                 : "Ask a strategic question to begin the executive discussion..."
             }
           />

@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
-import { writeFile, mkdir } from 'fs/promises';
-import { join } from 'path';
 import { z } from 'zod';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth/config';
+import { documentProcessor } from '@/lib/rag/document-processor';
+import { prisma } from '@/lib/db/connection';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_TYPES = [
@@ -14,29 +16,24 @@ const ALLOWED_TYPES = [
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 ];
 
-// Validation schema
+// Validation schemas
 const UploadRequestSchema = z.object({
   sessionId: z.string().optional(),
   category: z.enum(['financial', 'strategic', 'technical', 'hr', 'general']).default('general'),
   description: z.string().optional(),
 });
 
-// Document metadata interface
-interface DocumentMetadata {
-  fileName: string;
-  filePath: string;
-  fileSize: number;
-  fileType: string;
-  category: string;
-  description?: string;
-  sessionId?: string;
-  extractedText: string;
-  embeddings: number[];
-  uploadedAt: Date;
-}
-
 export async function POST(request: Request) {
   try {
+    // Authentication check
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
     
@@ -75,54 +72,88 @@ export async function POST(request: Request) {
       description: description || undefined
     });
 
-    // Create upload directory
-    const uploadDir = join(process.cwd(), 'uploads');
-    await mkdir(uploadDir, { recursive: true });
+    console.log(`📄 Processing document upload: ${file.name}`);
 
-    // Generate unique filename
-    const timestamp = Date.now();
-    const fileName = `${timestamp}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-    const filePath = join(uploadDir, fileName);
-
-    // Save file
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-    await writeFile(filePath, buffer);
-
-    // Extract text content (placeholder for now)
-    const extractedText = await extractTextFromFile(filePath, file.type);
-
-    // Generate embeddings (placeholder for now)
-    const embeddings = await generateEmbeddings(extractedText);
-
-    // Store document metadata in database (placeholder for now)
-    const documentId = await storeDocumentMetadata({
-      fileName: file.name,
-      filePath,
-      fileSize: file.size,
-      fileType: file.type,
+    // Process document with RAG system
+    const processedDocument = await documentProcessor.processDocument(file, {
       category: validatedData.category,
       description: validatedData.description,
       sessionId: validatedData.sessionId,
-      extractedText,
-      embeddings,
-      uploadedAt: new Date(),
     });
+
+    // Save processed document to database using existing Document schema
+    const dbDocument = await prisma.document.create({
+      data: {
+        id: processedDocument.id,
+        name: processedDocument.fileName,
+        type: processedDocument.fileType,
+        url: `/documents/${processedDocument.id}`, // Virtual URL for now
+        sessionId: processedDocument.sessionId || 'global', // Use 'global' if no session
+        metadata: JSON.stringify({
+          fileName: processedDocument.fileName,
+          fileSize: processedDocument.fileSize,
+          category: processedDocument.category,
+          description: processedDocument.description,
+          extractedTextLength: processedDocument.extractedText.length,
+          chunksCreated: processedDocument.chunks.length,
+          uploadedBy: session.user.id,
+          processedAt: processedDocument.processedAt,
+        })
+      }
+    });
+
+    // Store document chunks as vector embeddings
+    const vectorEmbeddings = await Promise.all(
+      processedDocument.chunks.map(async (chunk) => {
+        return await prisma.vectorEmbedding.create({
+          data: {
+            content: chunk.text,
+            embedding: JSON.stringify(chunk.embedding),
+            metadata: JSON.stringify({
+              documentId: processedDocument.id,
+              chunkIndex: chunk.chunkIndex,
+              fileName: processedDocument.fileName,
+              category: processedDocument.category,
+              section: chunk.metadata.section,
+              wordCount: chunk.metadata.wordCount,
+              uploadedBy: session.user.id,
+            }),
+            organizationId: session.user.company || null,
+          }
+        });
+      })
+    );
+
+    console.log(`✅ Document processed and saved: ${dbDocument.id} with ${vectorEmbeddings.length} embeddings`);
 
     return NextResponse.json({
       success: true,
       data: {
-        documentId,
-        fileName: file.name,
-        fileSize: file.size,
-        category: validatedData.category,
-        extractedTextLength: extractedText.length,
-        message: 'Document uploaded and processed successfully'
+        documentId: dbDocument.id,
+        fileName: processedDocument.fileName,
+        fileSize: processedDocument.fileSize,
+        category: processedDocument.category,
+        extractedTextLength: processedDocument.extractedText.length,
+        chunksCreated: processedDocument.chunks.length,
+        embeddingsStored: vectorEmbeddings.length,
+        message: 'Document uploaded and processed with RAG successfully'
       }
     });
 
   } catch (error) {
     console.error('Document upload error:', error);
+    
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Invalid request data', 
+          details: error.errors 
+        },
+        { status: 400 }
+      );
+    }
+    
     return NextResponse.json(
       { 
         success: false, 
@@ -133,75 +164,48 @@ export async function POST(request: Request) {
   }
 }
 
-// Text extraction function (simplified implementation)
-async function extractTextFromFile(filePath: string, fileType: string): Promise<string> {
-  // For now, return a placeholder
-  // In a real implementation, you would use libraries like:
-  // - pdf-parse for PDFs
-  // - mammoth for Word documents
-  // - xlsx for Excel files
-  
-  return `Extracted text from ${fileType} document. This would contain the actual document content in a production implementation.`;
-}
-
-// Embedding generation function (simplified implementation)
-async function generateEmbeddings(text: string): Promise<number[]> {
-  // For now, return a placeholder
-  // In a real implementation, you would use the 'text' parameter with:
-  // - OpenAI embeddings API
-  // - Google Vertex AI embeddings
-  // - Local embedding models
-  
-  // Suppress unused parameter warning - will be used in production implementation
-  void text;
-  
-  return new Array(1536).fill(0).map(() => Math.random());
-}
-
-// Database storage function (simplified implementation)
-async function storeDocumentMetadata(data: DocumentMetadata): Promise<string> {
-  // For now, return a placeholder ID
-  // In a real implementation, you would store in your database
-  
-  const documentId = `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  
-  console.log('Storing document metadata:', {
-    documentId,
-    fileName: data.fileName,
-    category: data.category,
-    textLength: data.extractedText.length
-  });
-  
-  return documentId;
-}
-
 export async function GET() {
   try {
-    // Return list of uploaded documents
-    // This would query the database in a real implementation
-    
-    const mockDocuments = [
-      {
-        id: 'doc_1',
-        fileName: 'Q4_Financial_Report.pdf',
-        category: 'financial',
-        uploadedAt: new Date().toISOString(),
-        fileSize: 2048576,
-        status: 'processed'
+    // Authentication check
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    // Get user's documents from database
+    const userDocuments = await prisma.document.findMany({
+      where: {
+        metadata: {
+          contains: session.user.id // Check if user uploaded the document
+        }
       },
-      {
-        id: 'doc_2',
-        fileName: 'Strategic_Plan_2025.docx',
-        category: 'strategic',
-        uploadedAt: new Date().toISOString(),
-        fileSize: 1048576,
-        status: 'processed'
+      orderBy: {
+        createdAt: 'desc'
       }
-    ];
+    });
+
+    // Format documents for response
+    const formattedDocuments = userDocuments.map(doc => {
+      const metadata = JSON.parse(doc.metadata || '{}');
+      return {
+        id: doc.id,
+        fileName: metadata.fileName || doc.name,
+        category: metadata.category || 'general',
+        uploadedAt: doc.createdAt.toISOString(),
+        fileSize: metadata.fileSize || 0,
+        status: 'processed',
+        chunksCreated: metadata.chunksCreated || 0,
+        extractedTextLength: metadata.extractedTextLength || 0
+      };
+    });
 
     return NextResponse.json({
       success: true,
-      data: mockDocuments
+      data: formattedDocuments,
+      message: `Found ${formattedDocuments.length} processed documents`
     });
 
   } catch (error) {

@@ -37,27 +37,80 @@ export async function POST(request: NextRequest) {
 
     console.log(`📝 Creating session "${sessionName}" for user ${userId} with scenario ${scenarioId}`);
 
-    // Verify the scenario exists or create it from predefined scenarios
+    // Ensure the user exists in the database (needed for foreign key constraints)
+    let user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
+    if (!user) {
+      console.log(`🔄 User ${userId} not found in database, creating user record`);
+      // Create a basic user record if it doesn't exist (for session-based users)
+      try {
+        user = await prisma.user.create({
+          data: {
+            id: userId,
+            email: session.user.email || `user-${userId}@system.local`,
+            name: session.user.name || 'System User',
+            role: 'user'
+          }
+        });
+        console.log(`✅ Created user record for ${userId}`);
+      } catch (error) {
+        console.error(`❌ Error creating user record:`, error);
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: 'Failed to create user record' 
+          },
+          { status: 500 }
+        );
+      }
+    }
+
+    // Verify the scenario exists (check database first, then predefined scenarios)
     let scenario = await prisma.scenario.findUnique({
       where: { id: scenarioId }
     });
 
+    let isPredefinedScenario = false;
+    let predefinedScenario = null;
+
     if (!scenario) {
       // Check if it's a predefined scenario
-      const predefinedScenario = PREDEFINED_SCENARIOS.find(s => s.id === scenarioId);
+      predefinedScenario = PREDEFINED_SCENARIOS.find(s => s.id === scenarioId);
       if (predefinedScenario) {
-        console.log(`📋 Creating predefined scenario ${scenarioId} in database`);
-        scenario = await prisma.scenario.create({
-          data: {
-            id: predefinedScenario.id,
-            name: predefinedScenario.name,
-            description: predefinedScenario.description,
-            tags: JSON.stringify(predefinedScenario.tags),
-            parameters: JSON.stringify(predefinedScenario.parameters),
-            status: predefinedScenario.status,
-            createdById: userId // Associate with the user creating the session
-          }
-        });
+        console.log(`📋 Using predefined scenario ${scenarioId} (creating in database if needed)`);
+        isPredefinedScenario = true;
+        
+        // Try to create the predefined scenario in the database
+        // Use upsert to handle case where it might already exist
+        console.log(`🏗️ Creating/finding predefined scenario ${scenarioId} in database`);
+        try {
+          scenario = await prisma.scenario.upsert({
+            where: { id: scenarioId },
+            update: {}, // Don't update if it already exists
+            create: {
+              id: scenarioId, // Use predefined scenario ID
+              name: predefinedScenario.name,
+              description: predefinedScenario.description,
+              parameters: JSON.stringify(predefinedScenario.parameters),
+              tags: JSON.stringify(predefinedScenario.tags),
+              status: predefinedScenario.status,
+              organizationId: null,
+              createdById: userId,
+            }
+          });
+          console.log(`✅ Predefined scenario ${scenarioId} ready in database`);
+        } catch (error) {
+          console.error(`❌ Error creating predefined scenario in database:`, error);
+          return NextResponse.json(
+            { 
+              success: false, 
+              error: `Failed to create predefined scenario in database: ${error}` 
+            },
+            { status: 500 }
+          );
+        }
       } else {
         // Check if it's a numeric ID that might be a database scenario
         console.log(`❌ Scenario ${scenarioId} not found in predefined scenarios or database`);
@@ -77,7 +130,7 @@ export async function POST(request: NextRequest) {
     const newSession = await prisma.boardroomSession.create({
       data: {
         name: sessionName,
-        scenarioId: scenarioId,
+        scenarioId: scenarioId, // Use original scenario ID (works for both predefined and custom)
         status: 'active',
         participants: {
           create: [
@@ -91,14 +144,17 @@ export async function POST(request: NextRequest) {
       },
       include: {
         participants: true,
-        scenario: {
-          select: {
-            id: true,
-            name: true,
-            description: true,
-            tags: true
+        // Only include scenario if it exists in database (custom scenarios)
+        ...(isPredefinedScenario ? {} : {
+          scenario: {
+            select: {
+              id: true,
+              name: true,
+              description: true,
+              tags: true
+            }
           }
-        }
+        })
       }
     });
 
@@ -111,7 +167,12 @@ export async function POST(request: NextRequest) {
         sessionId: newSession.id,
         sessionName: newSession.name,
         participants: newSession.participants,
-        scenario: newSession.scenario,
+        scenario: isPredefinedScenario ? {
+          id: predefinedScenario!.id,
+          name: predefinedScenario!.name,
+          description: predefinedScenario!.description,
+          tags: JSON.stringify(predefinedScenario!.tags)
+        } : newSession.scenario,
         selectedAgents: selectedAgents, // Include selected agents in response
         createdAt: newSession.createdAt,
         status: newSession.status

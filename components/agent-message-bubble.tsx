@@ -3,6 +3,8 @@
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { User, Briefcase, DollarSign, Code, Users } from "lucide-react"
+import { useState } from 'react';
+import { DecisionExplainer } from '@/components/explainability/decision-explainer';
 
 interface Message {
   id: string
@@ -20,6 +22,7 @@ interface Agent {
 interface AgentMessageBubbleProps {
   message: Message
   agent?: Agent
+  decisionId: string
 }
 
 const agentIcons = {
@@ -30,7 +33,8 @@ const agentIcons = {
   user: User,
 }
 
-export function AgentMessageBubble({ message, agent }: AgentMessageBubbleProps) {
+export function AgentMessageBubble({ message, agent, decisionId }: AgentMessageBubbleProps) {
+  const [showExplain, setShowExplain] = useState(false);
   const isUser = message.agent === "user"
   const Icon = agentIcons[message.agent as keyof typeof agentIcons] || User
 
@@ -63,7 +67,32 @@ export function AgentMessageBubble({ message, agent }: AgentMessageBubbleProps) 
         >
           <p className="text-sm leading-relaxed">{message.content}</p>
         </div>
+        
+        {!isUser && (
+          <div className="flex justify-start mt-2">
+            <button
+              className="text-xs text-primary underline hover:text-primary/80"
+              onClick={() => setShowExplain(true)}
+            >
+              Explain
+            </button>
+          </div>
+        )}
       </div>
+
+      {showExplain && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-background rounded-lg shadow-lg max-w-2xl w-full p-6 relative">
+            <button 
+              className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"
+              onClick={() => setShowExplain(false)}
+            >
+              ✕
+            </button>
+            <DecisionExplainer decisionId={decisionId} />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
