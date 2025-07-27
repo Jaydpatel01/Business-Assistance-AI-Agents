@@ -3,11 +3,31 @@ import Anthropic from '@anthropic-ai/sdk';
 import { getApiKey, getModelForAgent } from '../config/env';
 import { cacheService } from '../cache/redis';
 import { agentResponseCache } from '../cache/agent-response-cache';
+import marketService, { type MarketIntelligence } from '../market/market-service';
+import { memoryService } from './memory-service';
+import { explainableAIService } from './explainable-ai-service';
 
 // Initialize AI clients with error handling
-const getGeminiClient = () => {
+const getGeminiClient = (agentType?: AgentType) => {
   try {
-    const apiKey = getApiKey();
+    let apiKey: string | undefined;
+    
+    // Use agent-specific API key if available
+    if (agentType) {
+      const agentKeyMap = {
+        'ceo': process.env.GEMINI_API_KEY_CEO,
+        'cfo': process.env.GEMINI_API_KEY_CFO,
+        'cto': process.env.GEMINI_API_KEY_CTO,
+        'hr': process.env.GEMINI_API_KEY_HR
+      };
+      apiKey = agentKeyMap[agentType];
+    }
+    
+    // Fallback to general API key
+    if (!apiKey) {
+      apiKey = getApiKey();
+    }
+    
     if (!apiKey) {
       throw new Error('Google Gemini API key is not configured');
     }
@@ -70,7 +90,7 @@ export const agentProfiles = {
 export type AgentType = keyof typeof agentProfiles;
 
 // Types for better type safety
-interface ScenarioData {
+export interface ScenarioData {
   id?: string;
   name: string;
   description: string;
@@ -226,50 +246,7 @@ export async function getAgentResponse(
   sessionId?: string
 ): Promise<AgentResponse> {
   try {
-    // Check in-memory cache first for non-demo requests
-    if (!useDemoData) {
-      try {
-        const scenarioKey = `${scenario.name}:${scenario.description}`;
-        const cached = agentResponseCache.get(agentType, context, scenarioKey);
-        
-        if (cached) {
-          console.log(`In-memory cache hit for agent ${agentType}`);
-          return {
-            response: cached.content,
-            agentType,
-            timestamp: cached.timestamp,
-            fromCache: true,
-            agent: agentProfiles[agentType],
-            modelUsed: 'cached',
-            isDemoMode: false,
-          };
-        }
-      } catch (cacheError) {
-        console.warn('In-memory cache error:', cacheError);
-        // Continue with API call
-      }
-    }
-
-    // Check Redis cache as fallback
-    if (!useDemoData) {
-      try {
-        const cachedResponse = await cacheService.getCachedAgentResponse(agentType, JSON.stringify(scenario), context);
-        
-        if (cachedResponse) {
-          console.log(`Redis cache hit for agent ${agentType}`);
-          return {
-            ...cachedResponse,
-            fromCache: true,
-            timestamp: new Date().toISOString()
-          } as AgentResponse;
-        }
-      } catch (cacheError) {
-        console.warn('Redis cache error:', cacheError);
-        // Continue with API call
-      }
-    }
-
-    // If demo data is requested or API fails, return demo response
+    // If demo data is explicitly requested, return demo response immediately
     if (useDemoData) {
       const profile = agentProfiles[agentType];
       return {
@@ -285,6 +262,46 @@ export async function getAgentResponse(
           responseTime: Date.now(),
         }
       };
+    }
+
+    // For real users (non-demo), never use cache fallback to demo data
+    // Check in-memory cache first for non-demo requests
+    try {
+      const scenarioKey = `${scenario.name}:${scenario.description}`;
+      const cached = agentResponseCache.get(agentType, context, scenarioKey);
+      
+      if (cached) {
+        console.log(`In-memory cache hit for agent ${agentType}`);
+        return {
+          response: cached.content,
+          agentType,
+          timestamp: cached.timestamp,
+          fromCache: true,
+          agent: agentProfiles[agentType],
+          modelUsed: 'cached',
+          isDemoMode: false,
+        };
+      }
+    } catch (cacheError) {
+      console.warn('In-memory cache error:', cacheError);
+      // Continue with API call for real users
+    }
+
+    // Check Redis cache for real users
+    try {
+      const cachedResponse = await cacheService.getCachedAgentResponse(agentType, JSON.stringify(scenario), context);
+      
+      if (cachedResponse) {
+        console.log(`Redis cache hit for agent ${agentType}`);
+        return {
+          ...cachedResponse,
+          fromCache: true,
+          timestamp: new Date().toISOString()
+        } as AgentResponse;
+      }
+    } catch (cacheError) {
+      console.warn('Redis cache error:', cacheError);
+      // Continue with API call for real users
     }
 
     const profile = agentProfiles[agentType];
@@ -304,8 +321,28 @@ export async function getAgentResponse(
         // Continue without RAG context
       }
     }
+
+    // Get market intelligence data
+    let marketData: MarketIntelligence | null = null;
+    if (includeRAG) { // Use same flag for market intelligence
+      try {
+        marketData = await retrieveMarketIntelligence(agentType);
+      } catch (marketError) {
+        console.warn('Market intelligence retrieval failed:', marketError);
+        // Continue without market data
+      }
+    }
+
+    // Get memory-based contextual advice (Phase 5 integration)
+    let memoryAdvice = '';
+    try {
+      memoryAdvice = await memoryService.generateContextualAdvice(agentType, `${scenario.name}: ${context}`);
+    } catch (memoryError) {
+      console.warn('Memory advice retrieval failed:', memoryError);
+      // Continue without memory advice
+    }
     
-    const prompt = createEnhancedAgentPrompt(agentType, scenario, context, companyName, ragContext, relevantDocuments);
+    const prompt = createEnhancedAgentPrompt(agentType, scenario, context, companyName, ragContext, relevantDocuments, marketData, memoryAdvice);
     
     // Get AI provider from environment
     const provider = process.env.AI_PROVIDER || 'gemini';
@@ -345,7 +382,7 @@ export async function getAgentResponse(
           
           case 'gemini':
           default: {
-            const genAI = getGeminiClient();
+            const genAI = getGeminiClient(agentType);
             const model = genAI.getGenerativeModel({ 
               model: modelName,
               generationConfig: {
@@ -420,6 +457,144 @@ export async function getAgentResponse(
     }
 
     const responseTime = Date.now() - startTime;
+    
+    // Track decision in explainable AI system (Phase 6 integration)
+    let auditId: string | null = null;
+    try {
+      // Start decision tracking
+      auditId = explainableAIService.startDecisionTracking(
+        sessionId || 'anonymous',
+        agentType,
+        `${scenario.name}: ${scenario.description}`,
+        {
+          sessionType: 'agent_response',
+          documents: relevantDocuments.map(doc => doc.fileName),
+          marketData: marketData ? ['live_market_data'] : [],
+          memory: memoryAdvice ? ['memory_context'] : [],
+          collaboration: []
+        }
+      );
+
+      // Add reasoning steps based on available context
+      if (ragContext) {
+        explainableAIService.addReasoningStep(
+          auditId,
+          'evidence',
+          `Analyzed ${relevantDocuments.length} relevant company documents for context`,
+          relevantDocuments.map(doc => ({
+            id: `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            type: 'document' as const,
+            source: doc.fileName,
+            content: doc.excerpt.substring(0, 200) + '...',
+            relevance: doc.relevanceScore,
+            reliability: 0.9,
+            citation: `[${doc.fileName}]`,
+            metadata: { documentType: 'company_document', category: doc.category }
+          })),
+          0.9,
+          Math.floor(responseTime * 0.2)
+        );
+      }
+
+      if (marketData) {
+        explainableAIService.addReasoningStep(
+          auditId,
+          'analysis',
+          'Incorporated current market intelligence and economic indicators',
+          [{
+            id: `market_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            type: 'market_data' as const,
+            source: 'Live Market Data',
+            content: `Market conditions with ${marketData.stocks.length} stocks and ${marketData.news.length} news items`,
+            relevance: 0.8,
+            reliability: 0.85,
+            citation: '[Market Intelligence]',
+            metadata: { dataSource: 'yahoo_finance_news_api' }
+          }],
+          0.8,
+          Math.floor(responseTime * 0.15)
+        );
+      }
+
+      if (memoryAdvice) {
+        explainableAIService.addReasoningStep(
+          auditId,
+          'synthesis',
+          'Applied learned insights from previous similar decisions',
+          [{
+            id: `memory_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            type: 'memory' as const,
+            source: 'Agent Memory',
+            content: memoryAdvice.substring(0, 200) + '...',
+            relevance: 0.75,
+            reliability: 0.7,
+            citation: '[Past Experience]',
+            metadata: { memoryType: 'contextual_advice' }
+          }],
+          0.75,
+          Math.floor(responseTime * 0.1)
+        );
+      }
+
+      // Add final conclusion step
+      explainableAIService.addReasoningStep(
+        auditId,
+        'conclusion',
+        `Generated response using ${provider} AI model with comprehensive context analysis`,
+        [{
+          id: `ai_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          type: 'external' as const,
+          source: `${provider} AI`,
+          content: `AI-generated response with ${text.length} characters`,
+          relevance: 1.0,
+          reliability: 0.8,
+          citation: `[${modelName}]`,
+          metadata: { 
+            aiProvider: provider,
+            modelName,
+            responseLength: text.length
+          }
+        }],
+        0.8,
+        Math.floor(responseTime * 0.55)
+      );
+
+      // Complete decision tracking
+      explainableAIService.completeDecisionTracking(
+        auditId,
+        text,
+        0.8 // Overall confidence based on available context
+      );
+    } catch (explainabilityError) {
+      console.warn('Failed to track decision in explainable AI system:', explainabilityError);
+      // Don't fail the request if explainability tracking fails
+    }
+    
+    // Store memory for learning (Phase 5 integration)
+    try {
+      await memoryService.storeMemory({
+        agentType,
+        sessionId: sessionId || 'anonymous',
+        memoryType: 'decision',
+        context: `${scenario.name}: ${scenario.description}`,
+        content: text,
+        metadata: {
+          confidence: 0.8, // Default confidence for AI responses
+          relevanceScore: 1.0,
+          tags: [agentType, 'ai_response', scenario.name.toLowerCase().replace(/\s+/g, '_')],
+          businessMetrics: {
+            response_time: responseTime,
+            tokens_used: text.length,
+            documents_referenced: relevantDocuments.length,
+            audit_id: auditId ? 1 : 0 // Store as numeric flag for audit trail existence
+          }
+        }
+      });
+    } catch (memoryError) {
+      console.warn('Failed to store memory:', memoryError);
+      // Don't fail the request if memory storage fails
+    }
+
     const agentResponse = {
       response: text,
       agent: profile,
@@ -473,24 +648,29 @@ export async function getAgentResponse(
   } catch (error) {
     console.error(`Error getting agent response for ${agentType}:`, error);
     
-    // Fallback to demo response on API error
-    const profile = agentProfiles[agentType];
-    console.log(`Falling back to demo response for ${agentType} due to API error`);
-    
-    return {
-      response: demoResponses[agentType],
-      agent: profile,
-      timestamp: new Date().toISOString(),
-      modelUsed: 'demo-fallback',
-      agentType,
-      isDemoMode: true,
-      fromCache: false,
-      metadata: {
-        tokensUsed: demoResponses[agentType].length,
-        responseTime: Date.now(),
-        error: error instanceof Error ? error.message : 'Unknown error'
-      }
-    };
+    if (useDemoData) {
+      // For demo users, fallback to demo response on API error
+      const profile = agentProfiles[agentType];
+      console.log(`Falling back to demo response for ${agentType} due to API error`);
+      
+      return {
+        response: demoResponses[agentType],
+        agent: profile,
+        timestamp: new Date().toISOString(),
+        modelUsed: 'demo-fallback',
+        agentType,
+        isDemoMode: true,
+        fromCache: false,
+        metadata: {
+          tokensUsed: demoResponses[agentType].length,
+          responseTime: Date.now(),
+          error: error instanceof Error ? error.message : 'Unknown error'
+        }
+      };
+    } else {
+      // For real users, don't fallback to demo data - throw the error
+      throw new Error(`Agent ${agentType} service is currently unavailable. Please try again later.`);
+    }
   }
 }
 
@@ -501,42 +681,68 @@ const createEnhancedAgentPrompt = (
   context: string, 
   companyName = "the company",
   ragContext = "",
-  documents: RelevantDocument[] = []
+  documents: RelevantDocument[] = [],
+  marketData: MarketIntelligence | null = null,
+  memoryAdvice = ""
 ) => {
   const basePrompt = createAgentPrompt(agentType, scenario, context, companyName);
+  
+  let enhancedPrompt = basePrompt;
+
+  // Add memory-based advice (Phase 5 integration)
+  if (memoryAdvice && memoryAdvice.trim() !== "No relevant past experience found for this context.") {
+    enhancedPrompt += `\n\nYOUR PAST EXPERIENCE AND LEARNED INSIGHTS:\n${memoryAdvice}\n\nPlease consider these insights when formulating your response, but don't mention that you're using "memory" or "past experience" - simply incorporate the wisdom naturally.`;
+  }
+
+  // Add market intelligence context
+  if (marketData) {
+    const marketContext = formatMarketIntelligence(marketData, agentType);
+    enhancedPrompt += `\n\nCURRENT MARKET INTELLIGENCE:\n${marketContext}`;
+  }
   
   if (ragContext && documents.length > 0) {
     // Create source map for citations
     const sourceMap = documents.map((doc, index) => `[${index + 1}] ${doc.fileName}`).join('\n');
     
-    return `${basePrompt}
+    enhancedPrompt += `\n\nRELEVANT COMPANY DOCUMENTS:\n${ragContext}\n\nDOCUMENT SOURCES:\n${sourceMap}`;
+  }
 
-RELEVANT COMPANY DOCUMENTS:
-${ragContext}
+  // Add enhanced instructions based on available data
+  const hasMarketData = marketData !== null;
+  const hasDocuments = documents.length > 0;
 
-DOCUMENT SOURCES:
-${sourceMap}
-
-ENHANCED INSTRUCTIONS:
+  if (hasMarketData || hasDocuments) {
+    enhancedPrompt += `\n\nENHANCED INSTRUCTIONS:`;
+    
+    if (hasDocuments) {
+      enhancedPrompt += `
 - Base your analysis on the provided company documents above
 - Reference specific data points and findings from the documents
-- Use source citations like [1], [2], etc. when referencing specific documents
-- Provide document-backed insights that align with your ${agentProfiles[agentType].role} expertise
-- If documents provide contradictory information, acknowledge this and provide balanced analysis
-- Combine document insights with your professional knowledge for comprehensive recommendations
-- Prioritize document evidence over general assumptions
-- If the documents don't contain relevant information for your analysis, clearly state this
+- Use source citations like [1], [2], etc. when referencing specific documents`;
+    }
+    
+    if (hasMarketData) {
+      enhancedPrompt += `
+- Incorporate current market conditions and trends into your analysis
+- Reference specific market indicators, stock performance, and sector data
+- Consider how market sentiment and economic conditions impact your recommendations`;
+    }
+    
+    enhancedPrompt += `
+- Provide ${hasDocuments ? 'document-backed' : 'market-informed'} insights that align with your ${agentProfiles[agentType].role} expertise
+- Combine ${hasDocuments ? 'document insights' : ''} ${hasMarketData ? 'market intelligence' : ''} with your professional knowledge for comprehensive recommendations
+- Prioritize ${hasDocuments ? 'document evidence and ' : ''}real market data over general assumptions
+- If ${hasDocuments ? 'documents or ' : ''}market data ${hasDocuments ? 'don\'t contain' : 'doesn\'t provide'} relevant information for your analysis, clearly state this
 
 RESPONSE FORMAT:
-1. Document-Based Analysis: [Your analysis using cited sources]
-2. Professional Insights: [Your expert perspective integrating document findings]
-3. Recommendations: [Actionable recommendations with source backing]`;
+1. ${hasDocuments ? 'Document-Based Analysis: [Your analysis using cited sources]' : 'Market-Based Analysis: [Your analysis using current market data]'}
+2. Professional Insights: [Your expert perspective integrating ${hasDocuments ? 'document' : ''} ${hasMarketData ? 'and market' : ''} findings]
+3. Recommendations: [Actionable recommendations with ${hasDocuments ? 'source' : 'market data'} backing]`;
   }
   
-  return basePrompt;
+  return enhancedPrompt;
 }
 
-// RAG document retrieval function
 // RAG document retrieval function - Updated to use real RAG system
 async function retrieveRelevantDocuments(query: string, agentType: AgentType, userId?: string, organizationId?: string) {
   try {
@@ -576,20 +782,107 @@ async function retrieveRelevantDocuments(query: string, agentType: AgentType, us
   } catch (error) {
     console.error('Error retrieving RAG documents:', error);
     
-    // Fallback to limited mock data if RAG fails
-    console.log('Falling back to mock data due to RAG error');
-    const fallbackDoc: RelevantDocument = {
-      id: 'fallback_1',
-      fileName: 'System_Fallback.txt',
-      relevanceScore: 0.6,
-      excerpt: 'Note: Document retrieval system encountered an issue. Please ensure documents are uploaded and indexed.',
-      category: 'system'
-    };
+    // For real users, don't fallback to mock data - throw the error
+    throw new Error('Document retrieval system is currently unavailable. Please try again later.');
+  }
+}
+
+// Market intelligence retrieval function
+async function retrieveMarketIntelligence(agentType: AgentType): Promise<MarketIntelligence | null> {
+  try {
+    console.log(`Retrieving market intelligence for ${agentType} agent`);
     
-    return {
-      context: `[${fallbackDoc.fileName}]: ${fallbackDoc.excerpt}`,
-      documents: [fallbackDoc]
-    };
+    // Get relevant watchlist based on agent type
+    const watchlist = getAgentWatchlist(agentType);
+    
+    // Retrieve comprehensive market data
+    const marketData = await marketService.getMarketIntelligence(watchlist);
+    
+    console.log(`Retrieved market data with ${marketData.stocks.length} stocks, ${marketData.news.length} news items`);
+    
+    return marketData;
+  } catch (error) {
+    console.error('Error retrieving market intelligence:', error);
+    return null;
+  }
+}
+
+// Format market intelligence for agent prompts
+function formatMarketIntelligence(marketData: MarketIntelligence, agentType: AgentType): string {
+  const { stocks, indices, news, sectorPerformance } = marketData;
+  
+  let formatted = `Market Data (${new Date(marketData.timestamp).toLocaleString()}):\n\n`;
+  
+  // Major indices
+  formatted += `MAJOR INDICES:\n`;
+  formatted += `• S&P 500: $${indices.sp500.price.toFixed(2)} (${indices.sp500.changePercent > 0 ? '+' : ''}${indices.sp500.changePercent.toFixed(2)}%)\n`;
+  formatted += `• NASDAQ: $${indices.nasdaq.price.toFixed(2)} (${indices.nasdaq.changePercent > 0 ? '+' : ''}${indices.nasdaq.changePercent.toFixed(2)}%)\n`;
+  formatted += `• Dow Jones: $${indices.dow.price.toFixed(2)} (${indices.dow.changePercent > 0 ? '+' : ''}${indices.dow.changePercent.toFixed(2)}%)\n`;
+  formatted += `• VIX (Volatility): ${indices.vix.price.toFixed(2)} (${indices.vix.changePercent > 0 ? '+' : ''}${indices.vix.changePercent.toFixed(2)}%)\n\n`;
+  
+  // Key stocks relevant to agent
+  if (stocks.length > 0) {
+    formatted += `KEY STOCKS (Agent Watchlist):\n`;
+    stocks.forEach(stock => {
+      formatted += `• ${stock.symbol}: $${stock.price.toFixed(2)} (${stock.changePercent > 0 ? '+' : ''}${stock.changePercent.toFixed(2)}%)`;
+      if (stock.pe) formatted += ` [P/E: ${stock.pe.toFixed(1)}]`;
+      formatted += `\n`;
+    });
+    formatted += `\n`;
+  }
+  
+  // Sector performance (especially relevant for strategic decisions)
+  if (Object.keys(sectorPerformance).length > 0) {
+    formatted += `SECTOR PERFORMANCE:\n`;
+    Object.entries(sectorPerformance)
+      .sort(([,a], [,b]) => b - a) // Sort by performance
+      .forEach(([sector, perf]) => {
+        formatted += `• ${sector}: ${perf > 0 ? '+' : ''}${perf.toFixed(2)}%\n`;
+      });
+    formatted += `\n`;
+  }
+  
+  // Recent financial news (top 3-5 most relevant)
+  if (news.length > 0) {
+    const relevantNews = news.slice(0, agentType === 'ceo' ? 5 : 3);
+    formatted += `RECENT FINANCIAL NEWS:\n`;
+    relevantNews.forEach((item, index) => {
+      formatted += `${index + 1}. [${item.sentiment?.toUpperCase()}] ${item.title}\n`;
+      if (item.description) {
+        formatted += `   ${item.description.substring(0, 150)}${item.description.length > 150 ? '...' : ''}\n`;
+      }
+      formatted += `   Source: ${item.source} | ${new Date(item.publishedAt).toLocaleDateString()}\n\n`;
+    });
+  }
+  
+  return formatted;
+}
+
+// Get relevant stock watchlist based on agent type
+function getAgentWatchlist(agentType: AgentType): string[] {
+  const baseTech = ['AAPL', 'GOOGL', 'MSFT', 'NVDA'];
+  const baseFinancial = ['JPM', 'BAC', 'WFC', 'GS'];
+  const baseConsumer = ['AMZN', 'TSLA', 'HD', 'WMT'];
+  
+  switch (agentType) {
+    case 'ceo':
+      // Broad market view for strategic decisions
+      return [...baseTech, ...baseFinancial.slice(0, 2), ...baseConsumer.slice(0, 2), 'NFLX', 'DIS'];
+    
+    case 'cfo':
+      // Financial sector focus + major tech
+      return [...baseFinancial, ...baseTech.slice(0, 3), 'BRK-B', 'V'];
+    
+    case 'cto':
+      // Technology focus
+      return [...baseTech, 'META', 'NFLX', 'ADBE', 'CRM', 'ORCL'];
+    
+    case 'hr':
+      // Human capital and major employers
+      return [...baseTech.slice(0, 3), ...baseConsumer.slice(0, 2), 'UNH', 'PFE'];
+    
+    default:
+      return baseTech;
   }
 }
 

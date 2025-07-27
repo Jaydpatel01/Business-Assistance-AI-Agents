@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { useScenarios } from "@/hooks/use-scenarios"
+import { useOnboarding } from "@/hooks/use-onboarding"
 import { ExecutiveRole } from "@/types/executive"
 import { Save, ArrowLeft, Plus, X, FileText, Target, Users } from "lucide-react"
 
@@ -75,6 +76,7 @@ export function ScenarioEditor({ scenarioId, mode = "create" }: ScenarioEditorPr
   const router = useRouter()
   const { toast } = useToast()
   const { createScenario, updateScenario, getScenario } = useScenarios()
+  const { markStepCompleted } = useOnboarding()
 
   const loadScenario = useCallback(async (id: string) => {
     try {
@@ -149,6 +151,11 @@ export function ScenarioEditor({ scenarioId, mode = "create" }: ScenarioEditorPr
       }
 
       if (savedScenario) {
+        // Mark onboarding step as completed for new scenarios
+        if (mode === "create") {
+          markStepCompleted('create-scenario')
+        }
+        
         toast({
           title: "Success",
           description: `Scenario ${mode === "edit" ? "updated" : "created"} successfully`,

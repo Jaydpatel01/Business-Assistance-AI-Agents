@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth/config';
+import { PREDEFINED_SCENARIOS, formatScenarioForAPI } from '@/lib/scenarios/predefined-scenarios';
 
 const UpdateScenarioSchema = z.object({
   name: z.string().min(1, 'Name is required').optional(),
@@ -84,7 +85,24 @@ export async function GET(
       );
     }
 
-    // For now, return mock scenario data since database isn't fully set up yet
+    // Look for predefined scenario first
+    const predefinedScenario = PREDEFINED_SCENARIOS.find(s => s.id === id);
+    
+    if (predefinedScenario) {
+      const formattedScenario = formatScenarioForAPI(
+        predefinedScenario, 
+        session.user.id, 
+        session.user.name || undefined, 
+        session.user.email || undefined
+      );
+      
+      return NextResponse.json({
+        success: true,
+        data: formattedScenario
+      });
+    }
+
+    // If not found in predefined scenarios, check mock scenarios for backward compatibility
     const mockScenarios = getMockScenarios(session.user.id);
     const scenario = mockScenarios.find(s => s.id === id);
 

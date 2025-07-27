@@ -12,16 +12,8 @@ interface ProvidersProps {
 export function Providers({ children }: ProvidersProps) {
   return (
     <SessionProvider>
-      <ThemeProvider
-        attribute="class"
-        defaultTheme="system"
-        enableSystem
-        disableTransitionOnChange={false}
-        storageKey="business-ai-theme"
-      >
-        <div id="root" className="min-h-screen flex flex-col">
-          {children}
-        </div>
+      <ThemeProvider>
+        {children}
         <Toaster />
       </ThemeProvider>
     </SessionProvider>

@@ -28,6 +28,16 @@ interface SessionData {
   messages: Message[]
   progress: number
   activeAgents: string[]
+  documentContext?: {
+    documentsUsed: number
+    citations: Array<{
+      id: string
+      name: string
+      relevanceScore: number
+      excerpt: string
+      citationIndex: number
+    }>
+  }
 }
 
 interface UseBoardroomSessionOptions {

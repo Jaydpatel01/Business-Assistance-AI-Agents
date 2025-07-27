@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Upload, File, CheckCircle, AlertCircle, X, FileText, BarChart3 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { useOnboarding } from "@/hooks/use-onboarding"
 import { Document } from "@/lib/types"
 
 interface DocumentUploadProps {
@@ -43,6 +44,7 @@ export function DocumentUpload({ sessionId, onUploadComplete, maxFiles = 5 }: Do
   const [description, setDescription] = useState('')
   const [isUploading, setIsUploading] = useState(false)
   const { toast } = useToast()
+  const { markStepCompleted } = useOnboarding()
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (documents.length + acceptedFiles.length > maxFiles) {
@@ -130,6 +132,9 @@ export function DocumentUpload({ sessionId, onUploadComplete, maxFiles = 5 }: Do
             description: `${file.name} has been processed and is ready for AI analysis`
           })
 
+          // Mark onboarding step as completed
+          markStepCompleted('upload-documents')
+
           onUploadComplete?.(result.data)
         } else {
           throw new Error(result.error || 'Upload failed')
@@ -159,7 +164,7 @@ export function DocumentUpload({ sessionId, onUploadComplete, maxFiles = 5 }: Do
     }
 
     setIsUploading(false)
-  }, [category, description, sessionId, maxFiles, documents.length, toast, onUploadComplete])
+  }, [category, description, sessionId, maxFiles, documents.length, toast, onUploadComplete, markStepCompleted])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,

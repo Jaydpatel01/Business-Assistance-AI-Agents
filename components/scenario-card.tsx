@@ -149,9 +149,9 @@ export function ScenarioCard({ scenario }: ScenarioCardProps) {
 
         <CardFooter className="flex gap-2 pt-4">
           <Button asChild size="sm" className="flex-1">
-            <Link href={`/board-sessions/${scenario.id}`}>
+            <Link href={`/boardroom/new?scenario=${scenario.id}`}>
               <Play className="h-4 w-4 mr-2" />
-              Start Session
+              Start AI Discussion
             </Link>
           </Button>
 

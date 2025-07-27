@@ -1,38 +1,68 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent } from "@/components/ui/card"
-import { Send } from "lucide-react"
+import { Send, Loader2 } from "lucide-react"
+import { getScenarioInput } from "@/lib/demo/scenario-inputs"
+import { useSession } from "next-auth/react"
 
 interface MessageInputProps {
   onSendMessage: (message: string) => void
   isLoading?: boolean
   disabled?: boolean
   placeholder?: string
+  sessionData?: {
+    scenario?: {
+      id?: string
+      name?: string
+      title?: string
+    }
+    messages?: unknown[]
+  }
+  selectedAgents?: string[]
+  onAgentsChange?: (agents: ('ceo' | 'cfo' | 'cto' | 'hr')[]) => void
 }
 
-export function MessageInput({ 
-  onSendMessage, 
-  isLoading = false, 
+export function MessageInput({
+  onSendMessage,
+  isLoading = false,
   disabled = false,
-  placeholder = "Ask a strategic question to begin the executive discussion..."
+  placeholder = "Type your message...",
+  sessionData,
+  selectedAgents = [],
+  onAgentsChange
 }: MessageInputProps) {
+  const { data: session } = useSession()
   const [inputMessage, setInputMessage] = useState("")
+
+  // Check if user is in demo mode
+  const isDemoUser = session?.user?.email === 'demo@user.com' || session?.user?.name === 'Demo User'
+  
+  // Check if this is a new session (no messages yet)
+  const isNewSession = !sessionData?.messages || sessionData.messages.length === 0
+
+  // Auto-fill input when demo user selects a scenario for the first time
+  useEffect(() => {
+    if (isDemoUser && isNewSession && sessionData?.scenario?.id && !inputMessage) {
+      const scenarioInput = getScenarioInput(sessionData.scenario.id)
+      if (scenarioInput) {
+        setInputMessage(scenarioInput.defaultQuery)
+        
+        // Also auto-select recommended agents if callback is provided
+        if (onAgentsChange && scenarioInput.recommendedAgents) {
+          onAgentsChange(scenarioInput.recommendedAgents)
+        }
+      }
+    }
+  }, [isDemoUser, isNewSession, sessionData?.scenario?.id, inputMessage, onAgentsChange])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (inputMessage.trim() && !isLoading && !disabled) {
       onSendMessage(inputMessage.trim())
       setInputMessage("")
-    }
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault()
-      handleSubmit(e)
     }
   }
 
@@ -43,30 +73,30 @@ export function MessageInput({
           <Textarea
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
-            onKeyDown={handleKeyDown}
             placeholder={placeholder}
-            rows={3}
             disabled={disabled || isLoading}
-            className="resize-none"
-            aria-label="Strategic question input"
+            className="min-h-[100px] resize-none"
           />
           <div className="flex justify-between items-center">
-            <div className="text-xs text-muted-foreground">
-              Press Enter to send, Shift+Enter for new line
+            <div className="text-sm text-muted-foreground">
+              {selectedAgents.length > 0 
+                ? `Selected: ${selectedAgents.join(', ').toUpperCase()}`
+                : "Select agents to begin discussion"
+              }
             </div>
             <Button
               type="submit"
-              disabled={!inputMessage.trim() || isLoading || disabled}
+              disabled={!inputMessage.trim() || disabled || isLoading}
               className="min-w-[100px]"
             >
               {isLoading ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Sending
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Sending...
                 </>
               ) : (
                 <>
-                  <Send className="h-4 w-4 mr-2" />
+                  <Send className="w-4 h-4 mr-2" />
                   Send
                 </>
               )}

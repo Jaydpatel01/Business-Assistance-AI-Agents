@@ -1,4 +1,5 @@
 import { getAgentResponse, synthesizeDecision, type AgentType } from '@/lib/ai/agent-service';
+import { searchRAG, type RAGSearchResult } from '@/lib/rag';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getServerSession } from 'next-auth';
@@ -26,14 +27,15 @@ type AgentResponseType = {
 const BoardroomRequestSchema = z.object({
   scenario: z.object({
     id: z.string().optional(),
-    name: z.string().min(1).max(200),
-    description: z.string().min(1).max(2000),
+    name: z.string().min(1).max(200).optional(), // Make name optional and add default
+    description: z.string().min(1).max(2000).optional(), // Make description optional
     parameters: z.record(z.any()).optional(),
   }),
   query: z.string().min(1).max(5000), // Add length limits
   includeAgents: z.array(z.enum(['ceo', 'cfo', 'cto', 'hr'])).min(1).max(4),
   companyName: z.string().max(100).optional(),
   sessionId: z.string().max(50).optional(),
+  selectedDocuments: z.array(z.string()).max(10).optional(), // Allow up to 10 document IDs
 });
 
 export async function POST(request: Request) {
@@ -46,6 +48,14 @@ export async function POST(request: Request) {
         { status: 401 }
       );
     }
+
+    // Determine if user is in demo mode
+    const isDemo = !!(session.user?.role === 'demo' || 
+                     (session.user?.email && [
+                       "demo@businessai.com",
+                       "test@example.com", 
+                       "guest@demo.com"
+                     ].includes(session.user.email)));
 
     // 🔒 SECURITY: Rate limiting
     const userIdentifier = session.user?.email || 'anonymous';
@@ -64,12 +74,23 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     
+    // Debug: Log the received request body
+    console.log('🔍 Boardroom API received request:', JSON.stringify(body, null, 2));
+    
     // Validate request body
     const validatedData = BoardroomRequestSchema.parse(body);
-    const { scenario, query, includeAgents, companyName, sessionId: userSessionId } = validatedData;
+    const { scenario, query, includeAgents, companyName, sessionId: userSessionId, selectedDocuments } = validatedData;
+    
+    // Provide defaults for missing scenario data
+    const scenarioWithDefaults = {
+      id: scenario.id || 'default-scenario',
+      name: scenario.name || 'Boardroom Discussion',
+      description: scenario.description || 'AI-powered executive discussion',
+      parameters: scenario.parameters || {}
+    };
     
     // 🔒 SECURITY: Sanitize scenario data and cast to proper type
-    const sanitizedScenario = sanitizeScenario(scenario);
+    const sanitizedScenario = sanitizeScenario(scenarioWithDefaults);
     if (!sanitizedScenario) {
       return NextResponse.json(
         { success: false, error: 'Invalid scenario data' },
@@ -104,7 +125,41 @@ export async function POST(request: Request) {
     }
     
     // Build context from sanitized query
-    const context = `User Query: ${queryResult.sanitized}`;
+    let context = `User Query: ${queryResult.sanitized}`;
+    let documentContext: RAGSearchResult[] = [];
+    
+    // 📄 DOCUMENT INTELLIGENCE: Retrieve relevant documents for context
+    if (!isDemo) {
+      try {
+        // Search for relevant documents using RAG
+        documentContext = await searchRAG(
+          queryResult.sanitized,
+          {
+            topK: 5,
+            minScore: 0.7,
+            userId: session.user?.email || undefined,
+            useLocal: false, // Use OpenAI embeddings for better quality
+            documentId: selectedDocuments && selectedDocuments.length > 0 ? selectedDocuments[0] : undefined
+          }
+        );
+        
+        console.log(`Retrieved ${documentContext.length} relevant documents for query`);
+        
+        // Enhance context with document information
+        if (documentContext.length > 0) {
+          const documentSummary = documentContext
+            .map((doc, index) => 
+              `Document ${index + 1} (${doc.metadata.documentName}): ${doc.text.substring(0, 200)}...`
+            )
+            .join('\n\n');
+          
+          context += `\n\n📄 RELEVANT COMPANY DOCUMENTS:\n${documentSummary}`;
+        }
+      } catch (error) {
+        console.warn('Document retrieval failed, proceeding without document context:', error);
+        // Continue without document context - don't fail the entire request
+      }
+    }
     
     // Get responses from all requested agents in parallel with RAG enabled
     const sessionId = userSessionId || `brd-${Date.now()}`;
@@ -114,8 +169,8 @@ export async function POST(request: Request) {
         scenarioData, 
         context, 
         companyName,
-        false, // useDemoData
-        true,  // includeRAG - Enable RAG for document-informed responses
+        isDemo, // Use demo data for demo users, real data for real users
+        !isDemo, // Enable RAG only for real users to avoid fallbacks to demo data
         sessionId
       )
         .catch(error => ({
@@ -191,6 +246,16 @@ export async function POST(request: Request) {
         parameters: scenario.parameters
       },
       responses,
+      documentContext: documentContext.length > 0 ? {
+        documentsUsed: documentContext.length,
+        citations: documentContext.map((doc, index) => ({
+          id: doc.id,
+          name: doc.metadata.documentName,
+          relevanceScore: doc.score,
+          excerpt: doc.text.substring(0, 150) + '...',
+          citationIndex: index + 1
+        }))
+      } : null,
       synthesis: synthesis ? {
         recommendation: synthesis.synthesis,
         confidence: synthesis.confidence,

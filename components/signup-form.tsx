@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { Brain, Mail, Lock, User, Building, Eye, EyeOff } from "lucide-react"
+import { Brain, Mail, Lock, User, Building, Eye, EyeOff, ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
@@ -403,6 +403,28 @@ export function SignupForm() {
                 Sign in
               </Link>
             </p>
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <Separator className="w-full" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-card px-2 text-muted-foreground">Navigation</span>
+              </div>
+            </div>
+
+            <Link href="/" className="w-full">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                size="lg"
+                disabled={isLoading}
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Go back
+              </Button>
+            </Link>
           </CardFooter>
         </form>
       </Card>

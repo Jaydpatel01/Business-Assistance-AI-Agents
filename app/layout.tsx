@@ -55,16 +55,18 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className="">
       <head>
         <link rel="icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/placeholder-logo.png" />
         <meta name="theme-color" content="#45A29E" />
       </head>
       <body className={`${inter.className} antialiased min-h-screen`}>
-        <Providers>
-          {children}
-        </Providers>
+        <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+          <Providers>
+            {children}
+          </Providers>
+        </div>
       </body>
     </html>
   )

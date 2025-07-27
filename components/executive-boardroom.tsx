@@ -1,11 +1,15 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState, useCallback } from "react"
 import { BoardroomHeader } from "@/components/boardroom/BoardroomHeader"
 import { MessageList } from "@/components/boardroom/MessageList"
 import { MessageInput } from "@/components/boardroom/MessageInput"
 import { AgentSelector } from "@/components/boardroom/AgentSelector"
 import { BoardroomProgress } from "@/components/boardroom/BoardroomProgress"
+import { DocumentContext } from "@/components/boardroom/DocumentContext"
+import { DocumentSelector } from "@/components/boardroom/DocumentSelector"
+import DecisionSupport from "@/components/decision/DecisionSupport"
+import { DecisionRecommendation } from "@/lib/ai/decision-engine"
 import { LiveParticipants } from "@/components/live-participants"
 import { useBoardroomSession } from "@/hooks/useBoardroomSession"
 import { ExecutiveRole } from "@/types/executive"
@@ -46,6 +50,11 @@ const EXECUTIVE_AGENTS = [
 ]
 
 export function ExecutiveBoardroom({ sessionId }: ExecutiveBoardroomProps) {
+  const [showDocumentContext, setShowDocumentContext] = useState(true)
+  const [selectedDocuments, setSelectedDocuments] = useState<string[]>([])
+  const [isAnalyzingDecision, setIsAnalyzingDecision] = useState(false)
+  const [decisionRecommendation, setDecisionRecommendation] = useState<DecisionRecommendation | null>(null)
+  
   const {
     sessionData,
     selectedAgents,
@@ -54,6 +63,38 @@ export function ExecutiveBoardroom({ sessionId }: ExecutiveBoardroomProps) {
     toggleAgent,
     exportSummary
   } = useBoardroomSession({ sessionId })
+
+  // Function to analyze decision with AI
+  const handleDecisionAnalysis = useCallback(async () => {
+    if (!sessionData.scenario) return;
+
+    setIsAnalyzingDecision(true);
+    try {
+      const response = await fetch('/api/decision/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId,
+          scenario: sessionData.scenario,
+          participants: selectedAgents.map(agent => EXECUTIVE_AGENTS.find(a => a.id === agent)?.name || agent),
+          timeline: '3-6 months',
+          riskTolerance: 'medium',
+          organizationType: 'Technology Company',
+          documents: selectedDocuments
+        })
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        setDecisionRecommendation(result.data.recommendation);
+        console.log('🎯 Decision analysis completed:', result.data.recommendation.recommendation);
+      }
+    } catch (error) {
+      console.error('❌ Decision analysis failed:', error);
+    } finally {
+      setIsAnalyzingDecision(false);
+    }
+  }, [sessionId, sessionData.scenario, selectedAgents, selectedDocuments]);
 
   // Memoize current user for LiveParticipants to prevent re-renders
   const currentUser = useMemo(() => ({
@@ -73,6 +114,12 @@ export function ExecutiveBoardroom({ sessionId }: ExecutiveBoardroomProps) {
                 : sessionData.progress < 95 ? 'synthesis'
                 : 'summary'
   }), [sessionData.progress, selectedAgents])
+
+  // Wrapper function to include selected documents when sending messages
+  const handleSendMessage = useCallback((message: string) => {
+    // TODO: Implement document context support in sendMessage hook
+    return sendMessage(message)
+  }, [sendMessage])
 
   return (
     <div className="container mx-auto py-6 space-y-6">
@@ -108,9 +155,29 @@ export function ExecutiveBoardroom({ sessionId }: ExecutiveBoardroomProps) {
             isLoading={isProcessing}
           />
 
+          {/* Document Context - Show when available */}
+          {sessionData.documentContext && sessionData.documentContext.documentsUsed > 0 && (
+            <DocumentContext
+              documentsUsed={sessionData.documentContext.documentsUsed}
+              citations={sessionData.documentContext.citations}
+              isVisible={showDocumentContext}
+              onToggleVisibility={() => setShowDocumentContext(!showDocumentContext)}
+            />
+          )}
+
+          {/* Decision Support AI */}
+          <DecisionSupport
+            sessionId={sessionId}
+            scenario={typeof sessionData.scenario === 'string' ? sessionData.scenario : sessionData.scenario?.name || 'Strategic Decision Analysis'}
+            participants={selectedAgents.map(agent => EXECUTIVE_AGENTS.find(a => a.id === agent)?.name || agent)}
+            isAnalyzing={isAnalyzingDecision}
+            recommendation={decisionRecommendation || undefined}
+            onRequestAnalysis={handleDecisionAnalysis}
+          />
+
           {/* Message Input */}
           <MessageInput
-            onSendMessage={sendMessage}
+            onSendMessage={handleSendMessage}
             isLoading={isProcessing}
             disabled={selectedAgents.length === 0}
             placeholder={
@@ -123,6 +190,13 @@ export function ExecutiveBoardroom({ sessionId }: ExecutiveBoardroomProps) {
 
         {/* Sidebar */}
         <div className="space-y-6">
+          {/* Document Selector */}
+          <DocumentSelector
+            selectedDocuments={selectedDocuments}
+            onDocumentSelectionChange={setSelectedDocuments}
+            maxDocuments={5}
+          />
+
           {/* Live Participants */}
           <LiveParticipants
             sessionId={sessionId}

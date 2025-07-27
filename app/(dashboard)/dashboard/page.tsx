@@ -3,6 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ContentWrapper } from "@/components/content-wrapper"
+import { OnboardingBanner } from "@/components/onboarding/OnboardingBanner"
+import { QuickActionsSection } from "../../../components/dashboard/QuickActionsSection"
 import { Plus, TrendingUp, Users, FileText, CheckCircle, Sparkles, Brain, Zap, Target } from "lucide-react"
 import Link from "next/link"
 
@@ -152,6 +154,12 @@ export default function DashboardPage() {
 
   const realContent = (
     <div className="space-y-8 p-1">
+      {/* Onboarding Banner */}
+      <OnboardingBanner />
+      
+      {/* Quick Actions for New Users */}
+      <QuickActionsSection />
+      
       {/* Real Hero Section */}
       <div className="relative overflow-hidden rounded-2xl bg-card p-8 border">
         <div className="relative z-10 flex items-center justify-between">

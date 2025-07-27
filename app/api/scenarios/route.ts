@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth/config';
+import { getPredefinedScenarios, formatScenarioForAPI } from '@/lib/scenarios/predefined-scenarios';
 
 // Validation schemas
 const CreateScenarioSchema = z.object({
@@ -26,185 +27,37 @@ export async function GET(request: Request) {
     const status = searchParams.get('status');
     const tags = searchParams.get('tags')?.split(',');
 
-    // For now, return mock scenarios since database isn't fully set up yet
-    const mockScenarios = [
-      {
-        id: 'scenario-1',
-        name: 'Strategic Investment Analysis',
-        description: 'Evaluate major investment opportunities with comprehensive financial and strategic analysis including market research, competitive landscape, and risk assessment.',
-        tags: ['finance', 'strategy'],
-        parameters: {
-          timeframe: '6-months',
-          budget: '$2M',
-          departments: ['Finance', 'Strategy', 'Operations']
-        },
-        status: 'draft',
-        createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-        updatedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-        createdBy: {
-          id: session.user.id,
-          name: session.user.name || 'User',
-          email: session.user.email || 'user@example.com',
-        },
-        sessions: [
-          {
-            id: 'session-1',
-            name: 'Q4 Strategic Investment Review',
-            status: 'completed',
-            createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-            _count: {
-              participants: 4,
-              messages: 23,
-            },
-          }
-        ],
-      },
-      {
-        id: 'scenario-2',
-        name: 'Market Expansion Strategy',
-        description: 'Comprehensive analysis of European market entry opportunities with focus on regulatory compliance, competitive positioning, and local partnership strategies.',
-        tags: ['expansion', 'international'],
-        parameters: {
-          target_markets: ['Germany', 'France', 'UK'],
-          timeline: '12-months',
-          investment: '$5M'
-        },
-        status: 'active',
-        createdAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
-        updatedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-        createdBy: {
-          id: session.user.id,
-          name: session.user.name || 'User',
-          email: session.user.email || 'user@example.com',
-        },
-        sessions: [
-          {
-            id: 'session-2',
-            name: 'European Market Analysis',
-            status: 'active',
-            createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-            _count: {
-              participants: 6,
-              messages: 47,
-            },
-          },
-          {
-            id: 'session-3',
-            name: 'Competitive Analysis Session',
-            status: 'completed',
-            createdAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
-            _count: {
-              participants: 5,
-              messages: 31,
-            },
-          }
-        ],
-      },
-      {
-        id: 'scenario-3',
-        name: 'Digital Transformation Initiative',
-        description: 'Organization-wide digital transformation roadmap including technology modernization, process automation, and workforce training.',
-        tags: ['technology', 'transformation'],
-        parameters: {
-          scope: 'enterprise-wide',
-          duration: '18-months',
-          budget: '$8M'
-        },
-        status: 'draft',
-        createdAt: new Date(Date.now() - 21 * 24 * 60 * 60 * 1000).toISOString(),
-        updatedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-        createdBy: {
-          id: session.user.id,
-          name: session.user.name || 'User',
-          email: session.user.email || 'user@example.com',
-        },
-        sessions: [],
-      },
-      {
-        id: 'scenario-4',
-        name: 'Product Launch Strategy',
-        description: 'Go-to-market strategy for new product line including pricing analysis, channel partnerships, and marketing campaign development.',
-        tags: ['product', 'marketing'],
-        parameters: {
-          product_category: 'SaaS Platform',
-          target_segment: 'Enterprise',
-          launch_date: '2025-Q2'
-        },
-        status: 'active', 
-        createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-        updatedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-        createdBy: {
-          id: session.user.id,
-          name: session.user.name || 'User',
-          email: session.user.email || 'user@example.com',
-        },
-        sessions: [
-          {
-            id: 'session-4',
-            name: 'Product Positioning Workshop',
-            status: 'active',
-            createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-            _count: {
-              participants: 7,
-              messages: 19,
-            },
-          }
-        ],
-      },
-      {
-        id: 'scenario-5',
-        name: 'Cost Optimization Program',
-        description: 'Company-wide cost reduction initiative focusing on operational efficiency, vendor negotiations, and process streamlining.',
-        tags: ['finance', 'operations'],
-        parameters: {
-          target_savings: '$3M',
-          timeframe: '9-months',
-          departments: ['Operations', 'Procurement', 'IT']
-        },
-        status: 'completed',
-        createdAt: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString(),
-        updatedAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
-        createdBy: {
-          id: session.user.id,
-          name: session.user.name || 'User', 
-          email: session.user.email || 'user@example.com',
-        },
-        sessions: [
-          {
-            id: 'session-5',
-            name: 'Cost Analysis Deep Dive',
-            status: 'completed',
-            createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-            _count: {
-              participants: 5,
-              messages: 38,
-            },
-          },
-          {
-            id: 'session-6',
-            name: 'Vendor Negotiation Strategy',
-            status: 'completed',
-            createdAt: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString(),
-            _count: {
-              participants: 4,
-              messages: 28,
-            },
-          }
-        ],
-      }
-    ];
+    // Check if this is a demo user
+    const isDemoUser = session.user.role === 'demo';
 
-    // Apply filters if provided
-    const filteredScenarios = mockScenarios.filter(scenario => {
-      if (status && scenario.status !== status) return false;
-      if (tags && !tags.some(tag => scenario.tags.includes(tag))) return false;
-      return true;
+    // Get predefined scenarios for both demo and real users
+    const predefinedScenarios = getPredefinedScenarios({
+      status: status || undefined,
+      tags: tags || undefined
     });
 
-    return NextResponse.json({
-      success: true,
-      data: filteredScenarios,
-    });
+    // Format scenarios for API response
+    const formattedScenarios = predefinedScenarios.map(scenario => 
+      formatScenarioForAPI(scenario, session.user.id, session.user.name || undefined, session.user.email || undefined)
+    );
+
+    if (isDemoUser) {
+      // Demo users get predefined scenarios with demo response behavior
+      return NextResponse.json({
+        success: true,
+        data: formattedScenarios,
+        userType: 'demo'
+      });
+    } else {
+      // Real users get the same predefined scenarios but will get real AI responses when using them
+      // TODO: In the future, also include user-created scenarios from database
+      return NextResponse.json({
+        success: true,
+        data: formattedScenarios,
+        userType: 'real',
+        message: 'Predefined scenarios available. User-created scenarios will be added when database integration is complete.'
+      });
+    }
   } catch (error) {
     console.error('Error fetching scenarios:', error);
     return NextResponse.json(
@@ -213,7 +66,6 @@ export async function GET(request: Request) {
     );
   }
 }
-
 // POST create new scenario
 export async function POST(request: Request) {
   try {
@@ -228,28 +80,40 @@ export async function POST(request: Request) {
     const body = await request.json();
     const validatedData = CreateScenarioSchema.parse(body);
 
-    // For now, return mock created scenario since database isn't fully set up yet
-    const newScenario = {
-      id: `scenario-${Date.now()}`,
-      name: validatedData.name,
-      description: validatedData.description || '',
-      tags: validatedData.tags || [],
-      parameters: validatedData.parameters || {},
-      status: 'draft',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      createdBy: {
-        id: session.user.id,
-        name: session.user.name || 'User',
-        email: session.user.email || 'user@example.com',
-      },
-      sessions: [],
-    };
+    // Check if this is a demo user
+    const isDemoUser = session.user.role === 'demo';
 
-    return NextResponse.json({
-      success: true,
-      data: newScenario,
-    });
+    if (isDemoUser) {
+      // For demo users, return mock created scenario
+      const newScenario = {
+        id: `demo-scenario-${Date.now()}`,
+        name: validatedData.name,
+        description: validatedData.description || '',
+        tags: validatedData.tags || [],
+        parameters: validatedData.parameters || {},
+        status: 'draft',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        createdBy: {
+          id: session.user.id,
+          name: session.user.name || 'Demo User',
+          email: session.user.email || 'demo@user.com',
+        },
+        sessions: [],
+      };
+
+      return NextResponse.json({
+        success: true,
+        data: newScenario,
+      });
+    } else {
+      // For real users, save to database
+      // TODO: Implement real database save when database is set up
+      return NextResponse.json(
+        { success: false, error: 'Scenario creation for real users will be available when database is set up' },
+        { status: 501 }
+      );
+    }
   } catch (error) {
     console.error('Error creating scenario:', error);
     

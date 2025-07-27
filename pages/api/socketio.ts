@@ -25,6 +25,14 @@ export const config = {
   },
 }
 
+interface SessionMessage {
+  id: string;
+  agentType: string;
+  content: string;
+  timestamp: Date | string;
+  reasoning?: string;
+}
+
 interface SessionData {
   sessionId: string;
   message?: string;
@@ -86,7 +94,7 @@ const SocketHandler = async (req: NextApiRequest, res: NextApiResponseServerIO) 
         socket.emit('pong', timestamp)
       })
       
-      // Join boardroom session
+      // Join boardroom session (multiple event names for compatibility)
       socket.on('join_session', (sessionId: string) => {
         socket.join(`session-${sessionId}`)
         socket.to(`session-${sessionId}`).emit('user_joined', {
@@ -95,9 +103,29 @@ const SocketHandler = async (req: NextApiRequest, res: NextApiResponseServerIO) 
         })
         console.log(`User ${socket.id} joined session ${sessionId}`)
       })
+
+      socket.on('join-session', (data: { sessionId: string }) => {
+        const sessionId = data.sessionId
+        socket.join(`session-${sessionId}`)
+        socket.to(`session-${sessionId}`).emit('user_joined', {
+          userId: socket.id,
+          timestamp: new Date().toISOString()
+        })
+        console.log(`User ${socket.id} joined session ${sessionId}`)
+      })
       
-      // Leave boardroom session
+      // Leave boardroom session (multiple event names for compatibility)
       socket.on('leave_session', (sessionId: string) => {
+        socket.leave(`session-${sessionId}`)
+        socket.to(`session-${sessionId}`).emit('user_left', {
+          userId: socket.id,
+          timestamp: new Date().toISOString()
+        })
+        console.log(`User ${socket.id} left session ${sessionId}`)
+      })
+
+      socket.on('leave-session', (data: { sessionId: string }) => {
+        const sessionId = data.sessionId
         socket.leave(`session-${sessionId}`)
         socket.to(`session-${sessionId}`).emit('user_left', {
           userId: socket.id,
@@ -116,6 +144,13 @@ const SocketHandler = async (req: NextApiRequest, res: NextApiResponseServerIO) 
           timestamp,
           userId: socket.id
         } as SocketMessage)
+      })
+
+      // New real-time message sending
+      socket.on('send-message', (data: { sessionId: string; message: SessionMessage }) => {
+        const { sessionId, message } = data
+        socket.to(`session-${sessionId}`).emit('new-message', message)
+        console.log(`Message broadcast to session ${sessionId}:`, message.content)
       })
       
       // AI agent response streaming
@@ -137,11 +172,27 @@ const SocketHandler = async (req: NextApiRequest, res: NextApiResponseServerIO) 
           timestamp: new Date().toISOString()
         } as SocketAgentStatus)
       })
+
+      // New agent response broadcasting
+      socket.on('agent-response', (data: { sessionId: string; message: SessionMessage }) => {
+        const { sessionId, message } = data
+        socket.to(`session-${sessionId}`).emit('agent-response', message)
+        console.log(`Agent response broadcast to session ${sessionId}:`, message.agentType)
+      })
       
       // Session progress updates
       socket.on('progress_update', (data: SessionData) => {
         const { sessionId, progress, milestone } = data
         socket.to(`session-${sessionId}`).emit('session_progress', {
+          progress,
+          milestone,
+          timestamp: new Date().toISOString()
+        })
+      })
+
+      socket.on('progress-update', (data: { sessionId: string; progress: number; milestone?: string }) => {
+        const { sessionId, progress, milestone } = data
+        socket.to(`session-${sessionId}`).emit('progress-update', {
           progress,
           milestone,
           timestamp: new Date().toISOString()
@@ -163,6 +214,16 @@ const SocketHandler = async (req: NextApiRequest, res: NextApiResponseServerIO) 
         socket.to(`session-${sessionId}`).emit('user_typing', {
           userId: socket.id,
           typing: false
+        })
+      })
+
+      // New typing indicator
+      socket.on('typing', (data: { sessionId: string; isTyping: boolean }) => {
+        const { sessionId, isTyping } = data
+        socket.to(`session-${sessionId}`).emit('user-typing', {
+          userId: socket.id,
+          isTyping,
+          timestamp: new Date().toISOString()
         })
       })
       
