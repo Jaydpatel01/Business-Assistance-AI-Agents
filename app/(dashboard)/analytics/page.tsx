@@ -1,13 +1,11 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { AdvancedAnalyticsDashboard } from '@/components/analytics/AdvancedAnalyticsDashboard'
-import { SessionAnalytics } from '@/components/analytics/SessionAnalytics'
-import { SessionReplay } from '@/components/analytics/SessionReplay'
 import { 
   BarChart3, 
   TrendingUp, 
@@ -19,63 +17,89 @@ import {
   Play
 } from 'lucide-react'
 
-// Mock data for featured session
-const featuredSessionMetrics = {
-  sessionId: 'session-featured',
-  sessionName: 'Q1 Strategic Planning Review',
-  scenario: 'Strategic Planning',
-  duration: 65,
-  messageCount: 23,
-  participantCount: 4,
-  documentsUsed: 5,
-  decisionsReached: 7,
-  confidenceScore: 89,
-  status: 'completed' as const,
-  createdAt: '2025-01-14T10:30:00Z',
-  completedAt: '2025-01-14T11:35:00Z'
-}
-
-const comparisonData = {
-  avgDuration: 52,
-  avgMessages: 18,
-  avgDecisions: 5
+interface AnalyticsData {
+  activeSessions: number
+  totalDecisions: number
+  avgSessionTime: string
+  totalDocuments: number
 }
 
 export default function AnalyticsPage() {
   const [selectedTab, setSelectedTab] = useState('overview')
+  const [analytics, setAnalytics] = useState<AnalyticsData>({
+    activeSessions: 0,
+    totalDecisions: 0,
+    avgSessionTime: '0m',
+    totalDocuments: 0
+  })
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      try {
+        // Fetch real analytics data from API
+        const [sessionsRes, decisionsRes, documentsRes] = await Promise.all([
+          fetch('/api/sessions'),
+          fetch('/api/decisions'),
+          fetch('/api/documents')
+        ])
+
+        const sessions = await sessionsRes.json()
+        const decisions = await decisionsRes.json()
+        const documents = await documentsRes.json()
+
+        const activeSessions = sessions.success ? sessions.data.filter((s: { status: string }) => s.status === 'active').length : 0
+        const totalDecisions = decisions.success ? decisions.data.length : 0
+        const totalDocuments = documents.success ? documents.data.length : 0
+
+        setAnalytics({
+          activeSessions,
+          totalDecisions,
+          avgSessionTime: '0m', // Calculate based on real session data
+          totalDocuments
+        })
+      } catch (error) {
+        console.error('Failed to fetch analytics:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchAnalytics()
+  }, [])
 
   const quickStats = [
     {
       title: 'Active Sessions',
-      value: '3',
+      value: isLoading ? '...' : analytics.activeSessions.toString(),
       subtitle: 'Running now',
       icon: Activity,
       color: 'text-green-600',
-      trend: '+2 from yesterday'
+      trend: analytics.activeSessions > 0 ? `${analytics.activeSessions} active` : 'None active'
     },
     {
-      title: 'Decisions Today',
-      value: '12',
-      subtitle: 'Strategic outcomes',
+      title: 'Total Decisions',
+      value: isLoading ? '...' : analytics.totalDecisions.toString(),
+      subtitle: 'Made by AI analysis',
       icon: Target,
       color: 'text-blue-600',
-      trend: '+67% vs last week'
+      trend: analytics.totalDecisions > 0 ? 'Decisions recorded' : 'No decisions yet'
     },
     {
       title: 'Avg Session Time',
-      value: '47m',
+      value: isLoading ? '...' : analytics.avgSessionTime,
       subtitle: 'Per discussion',
       icon: Clock,
       color: 'text-purple-600',
-      trend: '-8 min improvement'
+      trend: 'Based on completed sessions'
     },
     {
-      title: 'Document Usage',
-      value: '28',
-      subtitle: 'Files referenced',
+      title: 'Total Documents',
+      value: isLoading ? '...' : analytics.totalDocuments.toString(),
+      subtitle: 'Files uploaded',
       icon: FileText,
       color: 'text-orange-600',
-      trend: '+15% this month'
+      trend: analytics.totalDocuments > 0 ? 'Documents uploaded' : 'No documents yet'
     }
   ]
 
@@ -155,10 +179,17 @@ export default function AnalyticsPage() {
         <TabsContent value="sessions" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2">
-              <SessionAnalytics 
-                sessionMetrics={featuredSessionMetrics}
-                comparisonData={comparisonData}
-              />
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+                  <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
+                    <BarChart3 className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2">No session analytics yet</h3>
+                  <p className="text-muted-foreground mb-6 max-w-md">
+                    Complete board sessions to generate detailed analytics and insights about your decision-making process.
+                  </p>
+                </CardContent>
+              </Card>
             </div>
             <div>
               <Card>
@@ -290,7 +321,17 @@ export default function AnalyticsPage() {
         </TabsContent>
 
         <TabsContent value="replay" className="space-y-6">
-          <SessionReplay sessionId="session-featured" autoPlay={false} playbackSpeed={1} />
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
+                <Play className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-semibold mb-2">No session replays available</h3>
+              <p className="text-muted-foreground mb-6 max-w-md">
+                Session replays will be available once you complete board sessions. You can then replay and analyze the decision-making process.
+              </p>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

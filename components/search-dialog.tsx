@@ -29,22 +29,6 @@ const mockSearchResults: SearchResult[] = [
     date: "2024-01-15",
   },
   {
-    id: "market-expansion-strategy",
-    title: "International Market Expansion",
-    type: "scenario",
-    description: "Analyze opportunities for expanding into European markets",
-    url: "/scenarios/market-expansion-strategy",
-    date: "2024-01-14",
-  },
-  {
-    id: "cost-optimization-initiative",
-    title: "Q4 Cost Optimization Initiative",
-    type: "scenario",
-    description: "Identify cost reduction opportunities across all departments",
-    url: "/scenarios/cost-optimization-initiative",
-    date: "2024-01-13",
-  },
-  {
     id: "ai-investment-decision-1",
     title: "AI Investment Decision",
     type: "decision",

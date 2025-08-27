@@ -55,6 +55,7 @@ model User {
   sessions      Session[]
   scenarios     Scenario[] // Scenarios created by the user
   participants  Participant[] // Sessions where the user is a participant
+  documents     Document[] // Documents uploaded by the user
 }
 
 model VerificationToken {
@@ -141,6 +142,9 @@ model Decision {
   title       String
   description String
   status      String   // proposed, approved, rejected
+  confidence  Float?   // AI confidence score (0-100)
+  riskLevel   Float?   // Risk assessment score (0-100)
+  createdBy   String?  // User who created the decision
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   metadata    String?    // JSON string for storing voting results, etc.
@@ -148,8 +152,10 @@ model Decision {
 
 model Document {
   id          String   @id @default(cuid())
-  sessionId   String
-  session     BoardroomSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId   String?
+  session     BoardroomSession?  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId      String   // Link documents directly to users for better data persistence
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name        String
   type        String   // pdf, image, spreadsheet, etc.
   url         String

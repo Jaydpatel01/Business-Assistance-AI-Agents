@@ -5,6 +5,9 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth/config';
+import { prisma } from '@/lib/db/connection';
 import { DecisionEngine, DecisionContext } from '@/lib/ai/decision-engine';
 
 const DecisionAnalysisRequest = z.object({
@@ -31,18 +34,89 @@ export async function POST(request: NextRequest) {
   try {
     console.log('🧠 Decision Analysis API: Received analysis request');
 
+    // Authentication check
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     const validatedData = DecisionAnalysisRequest.parse(body);
 
-    // Create decision context
+    console.log(`🔍 Fetching real session data for session: ${validatedData.sessionId}`);
+
+    // Fetch actual session data from database
+    const boardroomSession = await prisma.boardroomSession.findFirst({
+      where: {
+        id: validatedData.sessionId,
+        participants: {
+          some: {
+            userId: session.user.id
+          }
+        }
+      },
+      include: {
+        scenario: true,
+        messages: {
+          include: {
+            participant: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    name: true
+                  }
+                }
+              }
+            }
+          },
+          orderBy: {
+            createdAt: 'asc'
+          }
+        },
+        participants: {
+          include: {
+            user: {
+              select: {
+                name: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!boardroomSession) {
+      return NextResponse.json(
+        { success: false, error: 'Session not found or access denied' },
+        { status: 404 }
+      );
+    }
+
+    // Extract real conversation data
+    const userMessages = boardroomSession.messages.filter(m => m.agentType === null || m.agentType === 'user');
+    const aiMessages = boardroomSession.messages.filter(m => m.agentType !== null && m.agentType !== 'user');
+    const agentTypes = [...new Set(aiMessages.map(m => m.agentType).filter((type): type is string => type !== null))];
+
+    console.log(`📊 Session analysis: ${userMessages.length} user messages, ${aiMessages.length} AI messages, ${agentTypes.length} unique agents`);
+
+    // Build real context from session data
     const context: DecisionContext = {
-      scenario: validatedData.scenario,
-      documents: validatedData.documents,
-      participants: validatedData.participants,
+      scenario: boardroomSession.scenario?.name || validatedData.scenario,
+      participants: agentTypes.length > 0 ? agentTypes : validatedData.participants,
       timeline: validatedData.timeline,
       budget: validatedData.budget,
       riskTolerance: validatedData.riskTolerance,
       organizationType: validatedData.organizationType,
+      sessionMessages: boardroomSession.messages.map(msg => ({
+        content: msg.content,
+        agentType: msg.agentType || 'user',
+        timestamp: msg.createdAt,
+        participant: msg.participant?.user?.name || 'User'
+      })),
       previousDecisions: validatedData.previousDecisions?.map(d => ({
         ...d,
         timestamp: new Date(d.timestamp)
@@ -171,25 +245,47 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Helper function to log decision analysis for tracking
+// Helper function to log decision analysis for tracking and save to database
 async function logDecisionAnalysis(sessionId: string, scenario: string, recommendation: { recommendation: string; confidence: number; riskAssessment: { riskScore: number } }): Promise<void> {
   try {
     console.log(`📝 Logging decision analysis: ${sessionId} - ${scenario}`);
     
-    // In a real implementation, save to database for analytics
-    const logEntry = {
-      sessionId,
-      scenario,
-      recommendation: recommendation.recommendation,
-      confidence: recommendation.confidence,
-      riskScore: recommendation.riskAssessment.riskScore,
-      timestamp: new Date().toISOString()
-    };
-
-    console.log('📊 Analysis log entry:', logEntry);
+    const { prisma } = await import('@/lib/db/connection');
+    const { getServerSession } = await import('next-auth');
+    const { authOptions } = await import('@/lib/auth/config');
     
-    // TODO: Save to database
-    // await db.decisionAnalysis.create({ data: logEntry });
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) return;
+
+    // Check if session exists in database
+    const boardroomSession = await prisma.boardroomSession.findUnique({
+      where: { id: sessionId }
+    });
+
+    if (boardroomSession) {
+      // Save decision summary to database
+      await prisma.decision.create({
+        data: {
+          sessionId: sessionId,
+          title: `Decision Analysis: ${scenario}`,
+          description: recommendation.recommendation,
+          status: 'proposed', // Set default status
+          confidence: recommendation.confidence,
+          riskLevel: recommendation.riskAssessment.riskScore,
+          createdBy: session.user.id,
+          metadata: JSON.stringify({
+            analysisType: 'ai_generated',
+            scenario: scenario,
+            riskScore: recommendation.riskAssessment.riskScore,
+            timestamp: new Date().toISOString()
+          })
+        }
+      });
+      
+      console.log('✅ Decision summary saved to database');
+    } else {
+      console.log('ℹ️ Session not found in database, skipping database save');
+    }
 
   } catch (error) {
     console.error('❌ Failed to log decision analysis:', error);

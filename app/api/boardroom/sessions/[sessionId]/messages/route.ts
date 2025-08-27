@@ -272,10 +272,57 @@ export async function GET(request: NextRequest) {
     });
 
     if (!hasAccess) {
-      return NextResponse.json(
-        { success: false, error: 'Session not found or access denied' },
-        { status: 404 }
-      );
+      console.log(`❌ Session access denied for user ${userId} to session ${sessionId}`);
+      // Check if session exists at all
+      const sessionExists = await prisma.boardroomSession.findUnique({
+        where: { id: sessionId },
+        include: {
+          participants: true
+        }
+      });
+      
+      if (!sessionExists) {
+        console.log(`❌ Session ${sessionId} does not exist`);
+        return NextResponse.json(
+          { success: false, error: 'Session not found' },
+          { status: 404 }
+        );
+      } else {
+        console.log(`❌ User ${userId} is not a participant in session ${sessionId}`);
+        console.log(`📊 Session has ${sessionExists.participants.length} participants:`, 
+          sessionExists.participants.map(p => ({ userId: p.userId, role: p.role })));
+        
+        // Auto-fix: If user is trying to access their own session but participant record is missing,
+        // add them as a participant (this can happen due to timing issues during session creation)
+        const sessionCreatedRecently = new Date(sessionExists.createdAt).getTime() > Date.now() - (5 * 60 * 1000); // 5 minutes
+        if (sessionCreatedRecently && sessionExists.participants.length === 0) {
+          console.log(`🔧 Auto-fixing: Adding missing participant record for session owner`);
+          try {
+            await prisma.participant.create({
+              data: {
+                sessionId: sessionId,
+                userId: userId,
+                role: 'owner',
+                joinedAt: new Date()
+              }
+            });
+            console.log(`✅ Added participant record for user ${userId} in session ${sessionId}`);
+            
+            // Continue with the request now that participant record exists
+          } catch (autoFixError) {
+            console.error(`❌ Failed to auto-fix participant record:`, autoFixError);
+            return NextResponse.json(
+              { success: false, error: 'Access denied - you are not a participant in this session' },
+              { status: 403 }
+            );
+          }
+        } else {
+          return NextResponse.json(
+            { success: false, error: 'Access denied - you are not a participant in this session' },
+            { status: 403 }
+          );
+        }
+      }
     }
 
     // Fetch messages

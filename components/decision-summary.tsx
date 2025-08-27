@@ -3,155 +3,195 @@
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Copy, Download, ArrowLeft, Share, FileText, TrendingUp, CheckCircle, AlertTriangle } from "lucide-react"
+import { Copy, Download, ArrowLeft, Share, FileText, CheckCircle, AlertTriangle, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { useToast } from "@/hooks/use-toast"
+import { useState, useEffect } from "react"
 
 interface DecisionSummaryProps {
   sessionId: string
 }
 
-const executiveDecisionSummary = `
-# Executive Decision Summary
-## Strategic Investment Review - Q4 2024
+interface SessionData {
+  id: string
+  name: string
+  status: string
+  createdAt: string
+  scenario?: {
+    name: string
+    description: string
+  }
+  messages?: Array<{
+    id: string
+    content: string
+    agentType: string
+    createdAt: string
+  }>
+}
 
-### Session Overview
-**Date:** January 16, 2024  
-**Duration:** 45 minutes  
-**Participants:** CEO, CFO, CTO, HR Director (AI Agents)  
-**Investment Amount:** $5.0M  
-**Decision Status:** ✅ **UNANIMOUS APPROVAL**
-
----
-
-### 🎯 Strategic Decision
-
-**APPROVED:** Proceed with AI-first investment strategy focusing on customer experience automation and operational efficiency improvements.
-
-### 💰 Financial Allocation
-
-| Category | Amount | Percentage | Rationale |
-|----------|--------|------------|-----------|
-| **AI Customer Experience** | $2.0M | 40% | Highest ROI potential (35% IRR) |
-| **Operational Automation** | $1.5M | 30% | Cost reduction & efficiency gains |
-| **Technology Infrastructure** | $1.0M | 20% | Scalable platform foundation |
-| **Contingency Reserve** | $0.5M | 10% | Risk mitigation buffer |
-
-### 🏢 Executive Perspectives
-
-#### CEO - Strategic Vision
-*"This investment aligns perfectly with our 2025 vision of becoming an AI-first organization. The focus on customer experience will differentiate us in the market while operational automation provides sustainable competitive advantages."*
-
-**Key Priorities:**
-- Market differentiation through AI-powered customer experience
-- Long-term competitive positioning
-- Brand value enhancement
-
-#### CFO - Financial Analysis  
-*"The financial projections are compelling with 35% IRR and 18-month payback period. The 10% contingency reserve provides adequate risk protection given current market volatility."*
-
-**Financial Metrics:**
-- **Expected ROI:** 35% within 18 months
-- **Cash Flow Impact:** Positive by Q3 2025
-- **Risk Assessment:** Moderate-Low with contingency buffer
-
-#### CTO - Technology Strategy
-*"Our cloud-native architecture is ready to support these AI initiatives. The phased implementation approach minimizes technical risk while maximizing integration opportunities across business units."*
-
-**Technical Roadmap:**
-- Phase 1: Customer service automation (Q1 2025)
-- Phase 2: Operational process optimization (Q2 2025)  
-- Phase 3: Advanced analytics and insights (Q3 2025)
-
-#### HR Director - People & Culture
-*"The workforce is ready for this transformation. Our recent engagement surveys show 78% employee enthusiasm for AI collaboration. The 15% budget allocation for training ensures successful adoption."*
-
-**Human Capital Strategy:**
-- Comprehensive AI literacy training program
-- Role evolution rather than replacement
-- Change management and support systems
-
----
-
-### 📋 Implementation Plan
-
-#### Phase 1: Foundation (Q1 2025)
-- [ ] Vendor selection and contract finalization
-- [ ] Technical infrastructure setup
-- [ ] Employee training program launch
-- [ ] Pilot program with customer service team
-
-#### Phase 2: Expansion (Q2 2025)
-- [ ] Full customer experience automation rollout
-- [ ] Operational process automation implementation
-- [ ] Performance monitoring and optimization
-- [ ] Mid-point ROI assessment
-
-#### Phase 3: Optimization (Q3 2025)
-- [ ] Advanced analytics implementation
-- [ ] Cross-functional integration
-- [ ] Success metrics evaluation
-- [ ] Future investment planning
-
-### 🎯 Success Metrics
-
-| Metric | Target | Timeline |
-|--------|--------|----------|
-| Customer Satisfaction | >90% | Q2 2025 |
-| Operational Cost Reduction | 25% | Q3 2025 |
-| Employee AI Adoption | >85% | Q2 2025 |
-| Revenue Impact | +15% | Q4 2025 |
-
-### ⚠️ Risk Mitigation
-
-**Identified Risks:**
-1. **Technology Integration Complexity** - Mitigated by phased approach
-2. **Market Volatility Impact** - Protected by 10% contingency reserve  
-3. **Employee Resistance** - Addressed through comprehensive training
-4. **Vendor Performance** - Managed through milestone-based contracts
-
-### 🚀 Next Steps
-
-1. **Immediate (Next 30 days):**
-   - Board approval documentation
-   - Vendor RFP process initiation
-   - Project team formation
-
-2. **Short-term (Next 90 days):**
-   - Contract negotiations and finalization
-   - Technical architecture planning
-   - Training program development
-
-3. **Medium-term (Next 180 days):**
-   - Pilot program launch
-   - Initial implementation phase
-   - Performance baseline establishment
-
----
-
-### 📊 Executive Consensus Analysis
-
-**Unanimous Agreement Factors:**
-- Strong financial projections with acceptable risk profile
-- Strategic alignment with company vision and market trends
-- Technical feasibility confirmed by infrastructure readiness
-- Positive organizational readiness and employee engagement
-
-**Decision Confidence Level:** 94%
-
----
-
-*This decision summary represents the collective intelligence of our AI executive board and provides a comprehensive framework for strategic implementation.*
-`
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function DecisionSummary({ sessionId }: DecisionSummaryProps) {
   const { toast } = useToast()
+  const [sessionData, setSessionData] = useState<SessionData | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // Fetch session data when component mounts
+  useEffect(() => {
+    const fetchSessionData = async () => {
+      try {
+        setIsLoading(true)
+        console.log(`🔍 Fetching decision data for session ${sessionId}`)
+
+        // First, fetch all available sessions to see what exists
+        const sessionResponse = await fetch(`/api/boardroom/sessions`)
+        
+        if (!sessionResponse.ok) {
+          throw new Error('Failed to fetch sessions')
+        }
+
+        const sessionResult = await sessionResponse.json()
+        
+        if (sessionResult.success) {
+          console.log(`📊 Available sessions:`, sessionResult.data?.map((s: SessionData) => ({ id: s.id, name: s.name, status: s.status })))
+          
+          // Find the specific session from the list
+          const session = sessionResult.data?.find((s: SessionData) => s.id === sessionId)
+          
+          if (session) {
+            console.log(`✅ Found target session:`, { id: session.id, name: session.name, status: session.status })
+            
+            // Now fetch messages for this confirmed session
+            const messagesResponse = await fetch(`/api/boardroom/sessions/${sessionId}/messages`)
+            
+            if (messagesResponse.ok) {
+              const messagesResult = await messagesResponse.json()
+              
+              if (messagesResult.success) {
+                setSessionData({
+                  id: session.id,
+                  name: session.name,
+                  status: session.status,
+                  createdAt: session.createdAt,
+                  scenario: session.scenario,
+                  messages: messagesResult.data
+                })
+                console.log(`✅ Session data loaded successfully with ${messagesResult.data?.length || 0} messages`)
+              } else {
+                console.error(`❌ Failed to fetch messages:`, messagesResult.error)
+                throw new Error(`Failed to fetch messages: ${messagesResult.error}`)
+              }
+            } else {
+              console.error(`❌ Messages request failed with status ${messagesResponse.status}`)
+              const errorData = await messagesResponse.json().catch(() => ({}))
+              throw new Error(`Failed to fetch messages: ${errorData.error || 'Unknown error'}`)
+            }
+          } else {
+            console.error(`❌ Session ${sessionId} not found in available sessions`)
+            console.log(`💡 Available session IDs:`, sessionResult.data?.map((s: SessionData) => s.id))
+            
+            // Fallback: Use the most recent session if available
+            if (sessionResult.data && sessionResult.data.length > 0) {
+              const latestSession = sessionResult.data[0] // Sessions are ordered by createdAt DESC
+              console.log(`🔄 Falling back to latest session: ${latestSession.id}`)
+              
+              // Redirect to the correct session
+              if (typeof window !== 'undefined') {
+                window.location.href = `/decisions/${latestSession.id}`
+                return
+              }
+            }
+            
+            throw new Error(`Session not found: ${sessionId}`)
+          }
+        } else {
+          throw new Error('Failed to fetch session data')
+        }
+      } catch (err) {
+        console.error('Error fetching session data:', err)
+        setError(err instanceof Error ? err.message : 'Failed to load session data')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    if (sessionId && sessionId !== 'new') {
+      fetchSessionData()
+    }
+  }, [sessionId])
+
+  // Generate dynamic decision summary from session data
+  const generateDecisionSummary = (session: SessionData) => {
+    const date = new Date(session.createdAt).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    })
+    
+    const userMessages = session.messages?.filter(m => m.agentType === 'user') || []
+    const agentMessages = session.messages?.filter(m => m.agentType !== 'user') || []
+    
+    const agentTypes = [...new Set(agentMessages.map(m => m.agentType.toUpperCase()))]
+    
+    return `# Executive Decision Summary
+## ${session.scenario?.name || session.name}
+
+### Session Overview
+**Date:** ${date}  
+**Participants:** ${agentTypes.join(', ')} (AI Agents)  
+**Session ID:** ${session.id}  
+**Status:** ${session.status.toUpperCase()}
+
+---
+
+### 📋 Discussion Summary
+
+**Session Topic:** ${session.scenario?.description || 'Strategic business discussion'}
+
+### 💬 Key Discussion Points
+
+${userMessages.map((msg, index) => `
+#### Discussion Point ${index + 1}
+**User Input:** ${msg.content}
+
+**AI Executive Responses:**
+${agentMessages.filter(am => 
+  Math.abs(new Date(am.createdAt).getTime() - new Date(msg.createdAt).getTime()) < 300000 // Within 5 minutes
+).map(am => `
+**${am.agentType.toUpperCase()}:** ${am.content}
+`).join('')}
+`).join('')}
+
+### 🏢 Executive Participants
+
+${agentTypes.map(agent => `
+#### ${agent}
+*Provided strategic insights and recommendations based on ${agent.toLowerCase()} perspective.*
+`).join('')}
+
+---
+
+### 📊 Session Metrics
+
+| Metric | Value |
+|--------|-------|
+| **Total Messages** | ${session.messages?.length || 0} |
+| **User Inputs** | ${userMessages.length} |
+| **AI Responses** | ${agentMessages.length} |
+| **Active Agents** | ${agentTypes.length} |
+| **Session Duration** | Active |
+
+---
+
+*This decision summary was generated from actual session data and represents the collaborative intelligence of the AI executive board.*`
+  }
 
   const handleCopySummary = async () => {
+    if (!sessionData) return
+    
     try {
+      const summary = generateDecisionSummary(sessionData)
       if (typeof navigator !== 'undefined' && navigator.clipboard) {
-        await navigator.clipboard.writeText(executiveDecisionSummary)
+        await navigator.clipboard.writeText(summary)
         toast({
           title: "Decision summary copied",
           description: "The executive decision summary has been copied to your clipboard.",
@@ -163,8 +203,8 @@ export function DecisionSummary({ sessionId }: DecisionSummaryProps) {
           variant: "destructive"
         })
       }
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    } catch (error) {
+    } catch (err) {
+      console.error('Error copying summary:', err)
       toast({
         title: "Copy failed",
         description: "Failed to copy summary to clipboard.",
@@ -187,6 +227,47 @@ export function DecisionSummary({ sessionId }: DecisionSummaryProps) {
     })
   }
 
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="max-w-5xl mx-auto space-y-6">
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin" />
+          <span className="ml-2">Loading session data...</span>
+        </div>
+      </div>
+    )
+  }
+
+  // Error state
+  if (error || !sessionData) {
+    return (
+      <div className="max-w-5xl mx-auto space-y-6">
+        <div className="flex items-center justify-between">
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/dashboard">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Dashboard
+            </Link>
+          </Button>
+        </div>
+        <Card>
+          <CardContent className="py-12">
+            <div className="text-center">
+              <AlertTriangle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold mb-2">Session Not Found</h3>
+              <p className="text-muted-foreground">
+                {error || 'The requested session could not be found or you may not have access to it.'}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  const summary = generateDecisionSummary(sessionData)
+
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
@@ -198,14 +279,16 @@ export function DecisionSummary({ sessionId }: DecisionSummaryProps) {
             </Link>
           </Button>
           <div>
-            <h1 className="text-2xl font-bold">Strategic Investment Review</h1>
+            <h1 className="text-2xl font-bold">{sessionData.scenario?.name || sessionData.name}</h1>
             <div className="flex items-center gap-3 mt-1">
               <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">
                 <CheckCircle className="h-3 w-3 mr-1" />
-                Decision Approved
+                {sessionData.status === 'active' ? 'Active Session' : 'Completed Session'}
               </Badge>
-              <Badge variant="outline">Unanimous Consensus</Badge>
-              <span className="text-sm text-muted-foreground">Session completed on Jan 16, 2024</span>
+              <Badge variant="outline">Real Session Data</Badge>
+              <span className="text-sm text-muted-foreground">
+                Session from {new Date(sessionData.createdAt).toLocaleDateString()}
+              </span>
             </div>
           </div>
         </div>
@@ -242,145 +325,45 @@ export function DecisionSummary({ sessionId }: DecisionSummaryProps) {
         <CardContent>
           <div className="prose prose-sm max-w-none dark:prose-invert">
             <div className="whitespace-pre-wrap font-mono text-sm leading-relaxed bg-muted/30 p-6 rounded-lg border">
-              {executiveDecisionSummary}
+              {summary}
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Key Metrics Dashboard */}
-      <div className="grid gap-4 md:grid-cols-4">
+      {/* Real-time Session Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <TrendingUp className="h-4 w-4" />
-              Financial Impact
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Investment:</span>
-              <span className="font-medium">$5.0M</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Expected ROI:</span>
-              <span className="font-medium text-green-600">35%</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Payback Period:</span>
-              <span className="font-medium">18 months</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Risk Level:</span>
-              <span className="font-medium text-yellow-600">Moderate</span>
-            </div>
+          <CardContent className="py-4">
+            <div className="text-2xl font-bold">{sessionData.messages?.length || 0}</div>
+            <p className="text-xs text-muted-foreground">Total Messages</p>
           </CardContent>
         </Card>
-
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg">Session Metrics</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Duration:</span>
-              <span className="font-medium">45 minutes</span>
+          <CardContent className="py-4">
+            <div className="text-2xl font-bold">
+              {sessionData.messages?.filter(m => m.agentType === 'user').length || 0}
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Exchanges:</span>
-              <span className="font-medium">32 messages</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Participants:</span>
-              <span className="font-medium">4 AI executives</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Consensus:</span>
-              <span className="font-medium text-green-600">Unanimous</span>
-            </div>
+            <p className="text-xs text-muted-foreground">User Inputs</p>
           </CardContent>
         </Card>
-
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg">Implementation</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Start Date:</span>
-              <span className="font-medium">Q1 2025</span>
+          <CardContent className="py-4">
+            <div className="text-2xl font-bold">
+              {sessionData.messages?.filter(m => m.agentType !== 'user').length || 0}
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Phases:</span>
-              <span className="font-medium">3 phases</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Timeline:</span>
-              <span className="font-medium">9 months</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Success Rate:</span>
-              <span className="font-medium text-green-600">94% confidence</span>
-            </div>
+            <p className="text-xs text-muted-foreground">AI Responses</p>
           </CardContent>
         </Card>
-
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg">Risk Assessment</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Technical Risk:</span>
-              <span className="font-medium text-green-600">Low</span>
+          <CardContent className="py-4">
+            <div className="text-2xl font-bold">
+              {[...new Set(sessionData.messages?.filter(m => m.agentType !== 'user').map(m => m.agentType))].length || 0}
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Financial Risk:</span>
-              <span className="font-medium text-yellow-600">Medium</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Market Risk:</span>
-              <span className="font-medium text-yellow-600">Medium</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Mitigation:</span>
-              <span className="font-medium text-green-600">Strong</span>
-            </div>
+            <p className="text-xs text-muted-foreground">Active Agents</p>
           </CardContent>
         </Card>
       </div>
-
-      {/* Follow-up Actions */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Recommended Follow-up Actions</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-3">
-            <Button asChild variant="outline" className="h-auto p-4 flex-col gap-2 bg-transparent">
-              <Link href="/scenarios/new">
-                <FileText className="h-6 w-6" />
-                <span>Create Implementation Scenario</span>
-                <span className="text-xs text-muted-foreground">Plan detailed execution steps</span>
-              </Link>
-            </Button>
-            <Button asChild variant="outline" className="h-auto p-4 flex-col gap-2 bg-transparent">
-              <Link href="/board-sessions/schedule">
-                <AlertTriangle className="h-6 w-6" />
-                <span>Schedule Risk Review</span>
-                <span className="text-xs text-muted-foreground">Monitor implementation risks</span>
-              </Link>
-            </Button>
-            <Button asChild variant="outline" className="h-auto p-4 flex-col gap-2 bg-transparent">
-              <Link href="/analytics">
-                <TrendingUp className="h-6 w-6" />
-                <span>Track Progress</span>
-                <span className="text-xs text-muted-foreground">Monitor success metrics</span>
-              </Link>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   )
 }

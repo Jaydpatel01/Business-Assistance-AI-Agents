@@ -599,7 +599,14 @@ function ActionPlanTab({ actionItems, participants }: { actionItems: ActionItem[
                 {item.deadline && (
                   <div className="flex items-center space-x-1 text-gray-600">
                     <Clock className="h-3 w-3" />
-                    <span>Due: {item.deadline.toLocaleDateString()}</span>
+                    <span>Due: {(() => {
+                      try {
+                        const date = new Date(item.deadline);
+                        return isNaN(date.getTime()) ? 'Invalid date' : date.toLocaleDateString();
+                      } catch {
+                        return 'Invalid date';
+                      }
+                    })()}</span>
                   </div>
                 )}
                 {item.dependencies.length > 0 && (

@@ -137,14 +137,29 @@ export function ExecutiveBoardroom({ sessionId }: ExecutiveBoardroomProps) {
   const handleDecisionAnalysis = useCallback(async () => {
     if (!sessionData.scenario) return;
 
+    // Use the actual session ID from streaming state, fallback to URL sessionId
+    const actualSessionId = streamingState.sessionId || sessionId;
+    
+    if (!actualSessionId) {
+      console.error('❌ No session ID available for decision analysis');
+      return;
+    }
+
+    // Ensure we have some discussion content before analyzing
+    if (streamingState.messages.length === 0) {
+      console.warn('⚠️ No messages in session yet, decision analysis may use limited data');
+    }
+
     setIsAnalyzingDecision(true);
     try {
+      console.log(`🧠 Starting decision analysis for session: ${actualSessionId}`);
+      
       const response = await fetch('/api/decision/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          sessionId,
-          scenario: sessionData.scenario,
+          sessionId: actualSessionId,
+          scenario: sessionData.scenario.name || sessionData.scenario.description || 'General Business Discussion',
           participants: selectedAgents.map(agent => EXECUTIVE_AGENTS.find(a => a.id === agent)?.name || agent),
           timeline: '3-6 months',
           riskTolerance: 'medium',
@@ -157,13 +172,15 @@ export function ExecutiveBoardroom({ sessionId }: ExecutiveBoardroomProps) {
       if (result.success) {
         setDecisionRecommendation(result.data.recommendation);
         console.log('🎯 Decision analysis completed:', result.data.recommendation.recommendation);
+      } else {
+        console.error('❌ Decision analysis failed:', result.error);
       }
     } catch (error) {
       console.error('❌ Decision analysis failed:', error);
     } finally {
       setIsAnalyzingDecision(false);
     }
-  }, [sessionId, sessionData.scenario, selectedAgents, selectedDocuments]);
+  }, [sessionId, sessionData.scenario, selectedAgents, selectedDocuments, streamingState.sessionId, streamingState.messages.length]);
 
   // Memoize current user for LiveParticipants to prevent re-renders
   const currentUser = useMemo(() => ({

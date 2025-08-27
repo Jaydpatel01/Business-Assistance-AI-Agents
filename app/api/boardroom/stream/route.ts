@@ -9,6 +9,7 @@ import {
   sanitizeScenario, 
   checkRateLimit
 } from '@/lib/security/input-sanitizer';
+import { prisma } from '@/lib/db/connection';
 
 // Request validation schema
 const StreamBoardroomRequestSchema = z.object({
@@ -161,6 +162,133 @@ export async function POST(request: Request) {
         const sessionId = userSessionId || `brd-${Date.now()}`;
         
         try {
+          // 💾 DATABASE: Ensure session exists or create it
+          let existingSession = null;
+          if (userSessionId) {
+            // Check if session exists when continuing a conversation
+            existingSession = await prisma.boardroomSession.findFirst({
+              where: {
+                id: userSessionId,
+                participants: {
+                  some: {
+                    userId: session.user.id
+                  }
+                }
+              }
+            });
+          }
+
+          // Create session if it doesn't exist (both new sessions and missing existing ones)
+          if (!existingSession) {
+            console.log(`🔄 Creating new session: ${sessionId} for user: ${session.user.id}`);
+            
+            // Create new session for first message
+            const sessionData = {
+              id: sessionId,
+              name: query.substring(0, 100), // Use first part of query as name
+              status: 'active',
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              participants: {
+                create: {
+                  userId: session.user.id,
+                  role: 'owner',
+                  joinedAt: new Date()
+                }
+              }
+            };
+
+            try {
+              if (scenarioData?.id) {
+                // Use provided scenario
+                await prisma.boardroomSession.create({
+                  data: {
+                    ...sessionData,
+                    scenario: {
+                      connect: { id: scenarioData.id }
+                    }
+                  }
+                });
+                console.log(`✅ Session ${sessionId} created with scenario ${scenarioData.id}`);
+              } else {
+                // Create or find default "Ad-hoc Discussion" scenario
+                let defaultScenario = await prisma.scenario.findFirst({
+                  where: { 
+                    createdById: session.user.id,
+                    name: "Ad-hoc Discussion"
+                  }
+                });
+
+                if (!defaultScenario) {
+                  defaultScenario = await prisma.scenario.create({
+                    data: {
+                      id: `scenario-adhoc-${session.user.id}-${Date.now()}`,
+                      name: "Ad-hoc Discussion", 
+                      description: "General business discussion without a specific scenario",
+                      status: "active",
+                      createdById: session.user.id,
+                      parameters: JSON.stringify({
+                        type: "general",
+                        context: "open_discussion"
+                      })
+                    }
+                  });
+                  console.log(`✅ Created default scenario: ${defaultScenario.id}`);
+                }
+
+                await prisma.boardroomSession.create({
+                  data: {
+                    ...sessionData,
+                    scenario: {
+                      connect: { id: defaultScenario.id }
+                    }
+                  }
+                });
+                console.log(`✅ Session ${sessionId} created with default scenario`);
+              }
+
+              // Verify the session and participant were created
+              const verifySession = await prisma.boardroomSession.findFirst({
+                where: { id: sessionId },
+                include: {
+                  participants: true
+                }
+              });
+              
+              if (verifySession && verifySession.participants.length > 0) {
+                console.log(`✅ Session creation verified: ${sessionId} with ${verifySession.participants.length} participants`);
+              } else {
+                console.error(`❌ Session creation verification failed for: ${sessionId}`);
+              }
+              
+            } catch (sessionCreateError) {
+              console.error(`❌ Failed to create session ${sessionId}:`, sessionCreateError);
+              throw sessionCreateError;
+            }
+          } else {
+            console.log(`✅ Using existing session: ${sessionId}`);
+          }
+
+          // 💾 DATABASE: Save user's initial message
+          // Get participant ID for this user in this session
+          const participant = await prisma.participant.findFirst({
+            where: {
+              sessionId: sessionId,
+              userId: session.user.id
+            }
+          });
+
+          await prisma.message.create({
+            data: {
+              id: `msg-user-${Date.now()}`,
+              content: query,
+              agentType: 'user',
+              sessionId: sessionId,
+              participantId: participant?.id,
+              createdAt: new Date()
+            }
+          });
+
           // Send initial response with session info
           const initialData = {
             type: 'session_start',
@@ -245,6 +373,31 @@ export async function POST(request: Request) {
                 };
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify(agentResponseData)}\n\n`));
 
+                // 💾 DATABASE: Save agent response to database
+                // Get participant ID for this user in this session
+                const participant = await prisma.participant.findFirst({
+                  where: {
+                    sessionId: sessionId,
+                    userId: session.user.id
+                  }
+                });
+
+                await prisma.message.create({
+                  data: {
+                    id: `msg-${agentType}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                    content: agentResponse.response,
+                    agentType: agentType,
+                    sessionId: sessionId,
+                    participantId: participant?.id,
+                    createdAt: new Date(agentResponse.timestamp),
+                    metadata: JSON.stringify({
+                      modelUsed: agentResponse.modelUsed,
+                      confidence: 0.8,
+                      roundNumber: roundNumber
+                    })
+                  }
+                });
+
                 // Store response for this round
                 currentRoundResponses.push(`${agentType.toUpperCase()}: ${agentResponse.response}`);
                 
@@ -307,6 +460,15 @@ export async function POST(request: Request) {
             } : null
           };
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(completionData)}\n\n`));
+
+          // 💾 DATABASE: Mark session as completed
+          await prisma.boardroomSession.update({
+            where: { id: sessionId },
+            data: {
+              status: 'completed',
+              updatedAt: new Date()
+            }
+          });
 
         } catch (error) {
           console.error('Streaming error:', error);

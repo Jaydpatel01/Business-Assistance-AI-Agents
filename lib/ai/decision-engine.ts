@@ -12,6 +12,14 @@ export interface DecisionContext {
   riskTolerance: 'low' | 'medium' | 'high';
   organizationType: string;
   previousDecisions?: DecisionHistoryItem[];
+  sessionMessages?: SessionMessage[];
+}
+
+export interface SessionMessage {
+  content: string;
+  agentType: string;
+  timestamp: Date;
+  participant: string;
 }
 
 export interface DecisionHistoryItem {
@@ -229,20 +237,98 @@ export class DecisionEngine {
   private async generateRecommendation(context: DecisionContext): Promise<Omit<DecisionRecommendation, 'riskAssessment' | 'outcomePrediction' | 'actionItems' | 'followUpRequired'>> {
     console.log(`💡 Decision Engine: Generating recommendation for scenario: ${context.scenario}`);
     
-    // Simplified implementation - in production, use actual AI analysis
-    const confidence = this.calculateConfidence(context);
-    const recommendation = this.determineRecommendation(context);
+    // Analyze real session messages if available
+    let conversationAnalysis = '';
+    const discussionPoints: string[] = [];
     
-    return {
-      recommendation,
-      confidence,
-      reasoning: [
-        'Strong business case with clear value proposition',
-        'Acceptable risk level for organization tolerance',
-        'Available resources and timeline alignment',
-        'Strategic fit with organizational objectives'
-      ]
-    };
+    if (context.sessionMessages && context.sessionMessages.length > 0) {
+      console.log(`📊 Analyzing ${context.sessionMessages.length} session messages for insights`);
+      
+      // Extract key discussion points from each agent
+      const agentInputs = new Map<string, string[]>();
+      
+      context.sessionMessages.forEach(msg => {
+        if (msg.agentType && msg.agentType !== 'user') {
+          if (!agentInputs.has(msg.agentType)) {
+            agentInputs.set(msg.agentType, []);
+          }
+          agentInputs.get(msg.agentType)!.push(msg.content);
+        }
+      });
+
+      // Build conversation analysis from agent perspectives
+      agentInputs.forEach((messages, agentType) => {
+        const agentSummary = messages.join(' ').substring(0, 300);
+        discussionPoints.push(`${agentType.toUpperCase()} perspective: ${agentSummary}`);
+      });
+
+      conversationAnalysis = discussionPoints.join('\n\n');
+      
+      // Determine recommendation based on conversation content
+      const conversationText = context.sessionMessages.map(m => m.content).join(' ').toLowerCase();
+      
+      // Analyze sentiment and key themes
+      const positiveIndicators = ['recommend', 'benefit', 'opportunity', 'advantage', 'support', 'proceed', 'approve'];
+      const negativeIndicators = ['risk', 'concern', 'issue', 'challenge', 'problem', 'delay', 'caution'];
+      
+      const positiveCount = positiveIndicators.reduce((count, word) => 
+        count + (conversationText.split(word).length - 1), 0);
+      const negativeCount = negativeIndicators.reduce((count, word) => 
+        count + (conversationText.split(word).length - 1), 0);
+      
+      const sentimentScore = positiveCount - negativeCount;
+      
+      let recommendation: 'proceed' | 'proceed_with_caution' | 'defer' | 'reject';
+      let confidence: number;
+      let reasoningDetail: string;
+      
+      if (sentimentScore > 3) {
+        recommendation = 'proceed';
+        confidence = Math.min(85 + (sentimentScore * 2), 95);
+        reasoningDetail = 'Strong executive consensus supports moving forward';
+      } else if (sentimentScore > 0) {
+        recommendation = 'proceed_with_caution';
+        confidence = 70 + (sentimentScore * 3);
+        reasoningDetail = 'Address identified concerns before full implementation';
+      } else if (sentimentScore > -3) {
+        recommendation = 'defer';
+        confidence = 55;
+        reasoningDetail = 'Mixed signals require additional analysis';
+      } else {
+        recommendation = 'reject';
+        confidence = Math.max(30, 45 + (sentimentScore * 2));
+        reasoningDetail = 'Significant concerns outweigh benefits';
+      }
+
+      return {
+        recommendation,
+        confidence,
+        reasoning: [
+          `Analysis based on real boardroom discussion with ${context.participants.length} participants`,
+          `Decision: ${reasoningDetail}`,
+          `Conversation sentiment analysis: ${sentimentScore > 0 ? 'Positive' : sentimentScore < 0 ? 'Negative' : 'Neutral'} (${positiveCount} positive vs ${negativeCount} negative indicators)`,
+          `Key discussion themes identified from ${context.sessionMessages.length} messages`,
+          ...discussionPoints.slice(0, 2), // Include top 2 agent perspectives
+          conversationAnalysis.length > 0 ? 'Based on actual executive input and deliberation' : 'Standard risk-benefit analysis applied'
+        ]
+      };
+    } else {
+      // Fallback for sessions without messages
+      console.log(`⚠️ No session messages available, using scenario-based analysis`);
+      const confidence = this.calculateConfidence(context);
+      const recommendation = this.determineRecommendation(context);
+      
+      return {
+        recommendation,
+        confidence,
+        reasoning: [
+          'Analysis based on scenario parameters and organizational context',
+          'Standard risk-benefit framework applied',
+          'No boardroom discussion data available for this analysis',
+          'Recommendation based on established business decision criteria'
+        ]
+      };
+    }
   }
 
   /**

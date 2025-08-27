@@ -12,6 +12,16 @@ interface Message {
   reasoning?: string
 }
 
+interface ApiMessage {
+  id: string
+  content: string
+  agentType?: string
+  createdAt: string
+  metadata?: {
+    reasoning?: string
+  }
+}
+
 interface AgentResponse {
   perspective: string
   timestamp: string
@@ -105,15 +115,6 @@ export function useBoardroomSession({
   )
   const [isLoading, setIsLoading] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
-
-  // Initialize session data
-  useEffect(() => {
-    // Don't call refreshSession in useEffect to avoid dependency issues
-    setSessionData(prev => ({
-      ...prev,
-      activeAgents: selectedAgents
-    }))
-  }, [sessionId, selectedAgents])
 
   const sendMessage = useCallback(async (message: string) => {
     if (!message.trim() || selectedAgents.length === 0) {
@@ -260,9 +261,44 @@ export function useBoardroomSession({
 
     setIsLoading(true)
     try {
-      // In a real app, this would fetch session data from an API
-      // For now, we'll simulate a brief loading state
-      await new Promise(resolve => setTimeout(resolve, 500))
+      console.log(`🔄 Loading session data and messages for session ${sessionId}`)
+      
+      // Fetch session data and messages in parallel
+      const [sessionResponse, messagesResponse] = await Promise.all([
+        fetch(`/api/boardroom/sessions?sessionId=${sessionId}`),
+        fetch(`/api/boardroom/sessions/${sessionId}/messages`)
+      ])
+      
+      if (!sessionResponse.ok || !messagesResponse.ok) {
+        throw new Error('Failed to fetch session data')
+      }
+      
+      const sessionResult = await sessionResponse.json()
+      const messagesResult = await messagesResponse.json()
+      
+      if (sessionResult.success && messagesResult.success) {
+        // Update session data with fetched information
+        const sessionInfo = sessionResult.data?.[0] // Get first session from list
+        if (sessionInfo) {
+          setSessionData(prev => ({
+            ...prev,
+            id: sessionInfo.id,
+            name: sessionInfo.name,
+            scenario: sessionInfo.scenario || prev.scenario,
+            status: sessionInfo.status,
+            // Convert API messages to our Message format
+            messages: messagesResult.data.map((msg: ApiMessage) => ({
+              id: msg.id,
+              agentType: msg.agentType || 'user',
+              content: msg.content,
+              timestamp: new Date(msg.createdAt),
+              reasoning: msg.metadata?.reasoning
+            }))
+          }))
+          
+          console.log(`✅ Loaded ${messagesResult.data.length} previous messages`)
+        }
+      }
       
       // Update session data if needed
       setSessionData(prev => ({
@@ -279,7 +315,23 @@ export function useBoardroomSession({
     } finally {
       setIsLoading(false)
     }
-  }, [selectedAgents, toast, isDemoSession, isDemo])
+  }, [sessionId, selectedAgents, toast, isDemoSession, isDemo])
+
+  // Initialize session data and load previous messages
+  useEffect(() => {
+    console.log(`🚀 Initializing session ${sessionId}`)
+    
+    // Update activeAgents
+    setSessionData(prev => ({
+      ...prev,
+      activeAgents: selectedAgents
+    }))
+    
+    // Load previous messages for existing sessions (not demo sessions)
+    if (!isDemoSession && !isDemo && sessionId && sessionId !== 'new') {
+      refreshSession()
+    }
+  }, [sessionId, selectedAgents, isDemoSession, isDemo, refreshSession])
 
   return {
     sessionData,

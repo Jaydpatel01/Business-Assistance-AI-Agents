@@ -70,82 +70,74 @@ export function AdvancedAnalyticsDashboard({
     const loadAnalytics = async () => {
       setIsLoading(true)
       try {
-        // In a real implementation, these would be separate API calls
-        const [metricsRes, sessionsRes, documentsRes] = await Promise.all([
-          fetch(`/api/analytics/metrics?timeRange=${selectedTimeRange}&userId=${userId || ''}`),
-          fetch(`/api/analytics/sessions/recent?userId=${userId || ''}`),
-          fetch(`/api/analytics/documents/top?userId=${userId || ''}`)
+        // Fetch real data from existing endpoints
+        const [sessionsRes, decisionsRes, documentsRes] = await Promise.all([
+          fetch('/api/sessions'),
+          fetch('/api/decisions'),
+          fetch('/api/documents')
         ])
 
-        if (metricsRes.ok) {
-          const metricsData = await metricsRes.json()
-          setMetrics(metricsData.data)
-        }
+        const sessions = sessionsRes.ok ? await sessionsRes.json() : { success: false, data: [] }
+        const decisions = decisionsRes.ok ? await decisionsRes.json() : { success: false, data: [] }
+        const documents = documentsRes.ok ? await documentsRes.json() : { success: false, data: [] }
 
-        if (sessionsRes.ok) {
-          const sessionsData = await sessionsRes.json()
-          setRecentSessions(sessionsData.data)
-        }
+        // Calculate real metrics
+        const totalSessions = sessions.success ? sessions.data.length : 0
+        const activeSessions = sessions.success ? sessions.data.filter((s: { status: string }) => s.status === 'active').length : 0
+        const totalDecisions = decisions.success ? decisions.data.length : 0
+        const totalDocuments = documents.success ? documents.data.length : 0
 
-        if (documentsRes.ok) {
-          const documentsData = await documentsRes.json()
-          setTopDocuments(documentsData.data)
-        }
-      } catch (error) {
-        console.error('Failed to load analytics:', error)
-        // Mock data for demo
         setMetrics({
-          totalSessions: 42,
-          activeSessions: 3,
-          totalDecisions: 156,
-          avgSessionDuration: 47,
-          totalDocuments: 28,
-          totalMessages: 834,
-          userGrowth: 23.5,
-          sessionGrowth: 18.2,
-          decisionAccuracy: 87.3,
-          userEngagement: 76.8
+          totalSessions,
+          activeSessions,
+          totalDecisions,
+          avgSessionDuration: 0, // Calculate from real session data
+          totalDocuments,
+          totalMessages: 0, // Calculate from real message data
+          userGrowth: 0,
+          sessionGrowth: 0,
+          decisionAccuracy: 0,
+          userEngagement: 0
         })
 
-        setRecentSessions([
-          {
-            id: '1',
-            name: 'Q1 Strategic Planning',
-            scenario: 'Strategic Planning',
-            duration: 65,
-            status: 'completed',
-            participants: 4,
-            decisions: 7,
-            createdAt: '2025-01-14T10:30:00Z'
-          },
-          {
-            id: '2',
-            name: 'Budget Review Session',
-            scenario: 'Financial Planning',
-            duration: 32,
-            status: 'active',
-            participants: 3,
-            decisions: 2,
-            createdAt: '2025-01-15T14:15:00Z'
-          }
-        ])
+        // Set real recent sessions
+        if (sessions.success) {
+          const formattedSessions = sessions.data.slice(0, 5).map((session: { id: string, name: string, scenarioId?: string, status: string, createdAt: string }) => ({
+            id: session.id,
+            name: session.name,
+            scenario: session.scenarioId || 'General Discussion',
+            duration: 0, // Calculate from real timestamps
+            status: session.status,
+            participants: 1, // Get from real participant data
+            decisions: 0, // Count decisions for this session
+            createdAt: session.createdAt
+          }))
+          setRecentSessions(formattedSessions)
+        } else {
+          setRecentSessions([])
+        }
 
-        setTopDocuments([
-          {
-            id: '1',
-            name: 'Q4 Financial Report.pdf',
-            category: 'financial',
-            usageCount: 15,
-            lastUsed: '2025-01-14T16:20:00Z'
-          },
-          {
-            id: '2',
-            name: 'Strategic Plan 2025.docx',
-            category: 'strategic',
-            usageCount: 12,
-            lastUsed: '2025-01-15T09:45:00Z'
-          }
-        ])
+        // Set empty documents for now
+        setTopDocuments([])
+
+      } catch (error) {
+        console.error('Failed to load analytics:', error)
+        // Set empty data instead of mock data
+        setMetrics({
+          totalSessions: 0,
+          activeSessions: 0,
+          totalDecisions: 0,
+          avgSessionDuration: 0,
+          totalDocuments: 0,
+          totalMessages: 0,
+          userGrowth: 0,
+          sessionGrowth: 0,
+          decisionAccuracy: 0,
+          userEngagement: 0
+        })
+
+        setRecentSessions([])
+        setTopDocuments([])
       } finally {
         setIsLoading(false)
       }

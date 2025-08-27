@@ -7,11 +7,18 @@ import { PREDEFINED_SCENARIOS } from '@/lib/scenarios/predefined-scenarios';
 
 // Validation schema for session creation
 const CreateSessionSchema = z.object({
-  sessionName: z.string().min(1, 'Session name is required').max(200),
+  // Support both old and new field names for backward compatibility
+  sessionName: z.string().optional(),
+  name: z.string().optional(),
   sessionDescription: z.string().optional(),
-  scenarioId: z.string().min(1, 'Scenario ID is required'), // Make required for boardroom sessions
-  selectedAgents: z.array(z.string()).min(1, 'At least one agent must be selected').max(4),
+  description: z.string().optional(),
+  scenarioId: z.string().min(1, 'Scenario ID is required'),
+  selectedAgents: z.array(z.string()).optional().default(['ceo', 'cfo']), // Default agents if not provided
   companyName: z.string().optional(),
+  scheduledFor: z.string().optional(),
+  metadata: z.record(z.any()).optional(),
+}).refine(data => data.sessionName || data.name, {
+  message: "Either sessionName or name is required"
 });
 
 // POST - Create a new boardroom session
@@ -33,7 +40,10 @@ export async function POST(request: NextRequest) {
 
     // Validate request data
     const validatedData = CreateSessionSchema.parse(body);
-    const { sessionName, scenarioId, selectedAgents } = validatedData;
+    
+    // Support both old and new field names
+    const sessionName = validatedData.sessionName || validatedData.name || 'Unnamed Session';
+    const { scenarioId, selectedAgents } = validatedData;
 
     console.log(`📝 Creating session "${sessionName}" for user ${userId} with scenario ${scenarioId}`);
 
@@ -130,31 +140,17 @@ export async function POST(request: NextRequest) {
     const newSession = await prisma.boardroomSession.create({
       data: {
         name: sessionName,
-        scenarioId: scenarioId, // Use original scenario ID (works for both predefined and custom)
+        scenarioId: scenarioId,
         status: 'active',
         participants: {
           create: [
             {
               userId: userId,
-              role: 'facilitator', // Human user is the facilitator
+              role: 'facilitator',
               joinedAt: new Date(),
             }
           ]
         }
-      },
-      include: {
-        participants: true,
-        // Only include scenario if it exists in database (custom scenarios)
-        ...(isPredefinedScenario ? {} : {
-          scenario: {
-            select: {
-              id: true,
-              name: true,
-              description: true,
-              tags: true
-            }
-          }
-        })
       }
     });
 
@@ -165,15 +161,19 @@ export async function POST(request: NextRequest) {
       success: true,
       data: {
         sessionId: newSession.id,
+        id: newSession.id,
         sessionName: newSession.name,
-        participants: newSession.participants,
+        name: newSession.name,
         scenario: isPredefinedScenario ? {
           id: predefinedScenario!.id,
           name: predefinedScenario!.name,
           description: predefinedScenario!.description,
           tags: JSON.stringify(predefinedScenario!.tags)
-        } : newSession.scenario,
-        selectedAgents: selectedAgents, // Include selected agents in response
+        } : {
+          id: scenarioId,
+          name: scenario?.name || 'Unknown Scenario'
+        },
+        selectedAgents: selectedAgents,
         createdAt: newSession.createdAt,
         status: newSession.status
       }

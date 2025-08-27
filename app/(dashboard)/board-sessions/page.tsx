@@ -1,3 +1,6 @@
+"use client"
+
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -6,128 +9,99 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar, Clock, Users, Play, Search, Plus } from "lucide-react"
 import Link from "next/link"
 import { ClientDate } from "@/components/client-date"
+import { useToast } from "@/hooks/use-toast"
 
-const boardSessions = [
-  {
-    id: "session-1",
-    title: "Q4 Strategic Investment Review",
-    status: "Active" as const,
-    scheduledDate: "2024-01-16T14:00:00",
-    duration: "45 min",
-    participants: ["CEO", "CFO", "CTO", "Marketing Director"],
-    scenario: "Strategic Investment Analysis",
-    progress: 65,
-    description: "Quarterly review of strategic investment opportunities and portfolio optimization"
-  },
-  {
-    id: "session-2",
-    title: "European Market Expansion Strategy",
-    status: "Active" as const,
-    scheduledDate: "2024-01-15T09:00:00", 
-    duration: "75 min",
-    participants: ["CEO", "Marketing Director", "CFO", "Operations"],
-    scenario: "Market Expansion Strategy",
-    progress: 35,
-    description: "Comprehensive analysis of European market entry opportunities and risk assessment"
-  },
-  {
-    id: "session-3",
-    title: "Digital Transformation Roadmap",
-    status: "Completed" as const,
-    scheduledDate: "2024-01-12T16:00:00",
-    duration: "90 min",
-    participants: ["CEO", "CTO", "HR Director", "CFO"],
-    scenario: "Digital Transformation Roadmap",
-    progress: 100,
-    description: "18-month digital transformation strategy and technology modernization plan"
-  },
-  {
-    id: "session-4",
-    title: "Cost Optimization Initiative",
-    status: "Scheduled" as const,
-    scheduledDate: "2024-01-18T11:00:00",
-    duration: "60 min",
-    participants: ["CFO", "Operations", "HR Director"],
-    scenario: "Cost Optimization Initiative",
-    progress: 0,
-    description: "Comprehensive cost reduction analysis without impacting service quality"
-  },
-  {
-    id: "session-5",
-    title: "Customer Retention Strategy",
-    status: "Completed" as const,
-    scheduledDate: "2024-01-08T13:30:00",
-    duration: "65 min",
-    participants: ["Marketing Director", "Customer Success", "CEO"],
-    scenario: "Customer Retention Strategy", 
-    progress: 100,
-    description: "Development of comprehensive customer retention and satisfaction improvement initiatives"
-  },
-  {
-    id: "session-6",
-    title: "Workforce Planning & Development",
-    status: "Active" as const,
-    scheduledDate: "2024-01-14T10:30:00",
-    duration: "55 min",
-    participants: ["HR Director", "CEO", "CFO"],
-    scenario: "Workforce Planning Restructuring",
-    progress: 40,
-    description: "Strategic workforce planning and skill development roadmap for 2025"
-  },
-  {
-    id: "session-7",
-    title: "Technology Infrastructure Assessment",
-    status: "Draft" as const,
-    scheduledDate: "2024-01-20T15:00:00",
-    duration: "70 min", 
-    participants: ["CTO", "CFO", "Security Officer"],
-    scenario: "Technology Infrastructure",
-    progress: 0,
-    description: "Comprehensive assessment of current technology stack and security posture"
-  },
-  {
-    id: "session-8",
-    title: "Q1 Budget Allocation Review",
-    status: "Scheduled" as const,
-    scheduledDate: "2024-01-19T14:30:00",
-    duration: "50 min",
-    participants: ["CFO", "CEO", "Department Heads"],
-    scenario: "Budget Planning",
-    progress: 0,
-    description: "Q1 2025 budget allocation and resource optimization across all departments"
-  },
-  {
-    id: "session-9",
-    title: "Product Innovation Strategy",
-    status: "Completed" as const,
-    scheduledDate: "2024-01-05T11:00:00",
-    duration: "85 min",
-    participants: ["CEO", "CTO", "Marketing Director", "R&D"],
-    scenario: "Product Innovation",
-    progress: 100,
-    description: "Next-generation product development strategy and innovation roadmap"
-  },
-  {
-    id: "session-10",
-    title: "Risk Management Framework",
-    status: "Active" as const,
-    scheduledDate: "2024-01-13T16:30:00",
-    duration: "45 min",
-    participants: ["CFO", "Legal", "Operations", "CEO"],
-    scenario: "Risk Assessment",
-    progress: 55,
-    description: "Enterprise risk management framework and mitigation strategies"
-  }
-]
+type SessionStatus = "Active" | "Scheduled" | "Completed" | "Draft"
 
-const statusColors = {
-  Active: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
-  Scheduled: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300",
-  Completed: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
-  Draft: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300",
+interface BoardSession {
+  id: string
+  title: string
+  status: SessionStatus
+  scheduledDate: string
+  duration: string
+  participants: string[]
+  scenario: string
+  progress: number
+  description: string
 }
 
 export default function BoardSessionsPage() {
+  const [boardSessions, setBoardSessions] = useState<BoardSession[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const { toast } = useToast()
+
+  const statusColors = {
+    Active: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
+    Scheduled: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300",
+    Completed: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
+    Draft: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300",
+  }
+
+  useEffect(() => {
+    async function fetchSessions() {
+      try {
+        const response = await fetch('/api/sessions')
+        if (response.ok) {
+          const result = await response.json()
+          if (result.success) {
+            // Transform API response to our BoardSession format
+            const transformedSessions: BoardSession[] = result.data.map((session: {
+              id: string
+              name: string
+              status: string
+              createdAt: string
+              duration?: string
+              participants?: Array<{ user?: { name?: string } }>
+              scenario?: { name?: string; description?: string }
+            }) => ({
+              id: session.id,
+              title: session.name,
+              status: session.status === 'active' ? 'Active' : 
+                     session.status === 'completed' ? 'Completed' : 
+                     session.status === 'scheduled' ? 'Scheduled' : 'Draft',
+              scheduledDate: session.createdAt,
+              duration: session.duration || '45 min',
+              participants: session.participants?.map(p => p.user?.name || 'User') || [],
+              scenario: session.scenario?.name || 'Strategic Session',
+              progress: session.status === 'completed' ? 100 : 
+                       session.status === 'active' ? 50 : 0,
+              description: session.scenario?.description || 'Strategic consultation session'
+            }))
+            setBoardSessions(transformedSessions)
+          }
+        } else {
+          console.error('Failed to fetch sessions:', response.statusText)
+        }
+      } catch (error) {
+        console.error('Error fetching sessions:', error)
+        toast({
+          title: "Error",
+          description: "Failed to load board sessions",
+          variant: "destructive"
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchSessions()
+  }, [toast])
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Board Sessions</h1>
+            <p className="text-muted-foreground">Loading your executive AI consultation sessions...</p>
+          </div>
+        </div>
+        <div className="flex justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+        </div>
+      </div>
+    )
+  }
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -163,90 +137,110 @@ export default function BoardSessionsPage() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-1">
-        {boardSessions.map((session) => (
-          <Card key={session.id} className="hover:shadow-lg transition-all duration-200 border-l-4 border-l-indigo-500">
-            <CardHeader>
-              <div className="flex items-start justify-between">
-                <div className="space-y-1">
-                  <CardTitle className="text-xl">{session.title}</CardTitle>
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <Calendar className="h-4 w-4" />
-                      <ClientDate date={session.scheduledDate} />
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Clock className="h-4 w-4" />
-                      <span>
-                        <ClientDate date={session.scheduledDate} format="time" />
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Users className="h-4 w-4" />
-                      <span>{session.participants.length} participants</span>
-                    </div>
-                  </div>
-                </div>
-                <Badge className={statusColors[session.status]} variant="secondary">
-                  {session.status}
-                </Badge>
+        {boardSessions.length === 0 ? (
+          <Card className="col-span-full">
+            <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
+                <Calendar className="h-8 w-8 text-muted-foreground" />
               </div>
-            </CardHeader>
-
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Scenario Type:</span>
-                <Badge variant="outline">{session.scenario}</Badge>
-              </div>
-
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Duration:</span>
-                <span className="font-medium">{session.duration}</span>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Progress:</span>
-                  <span className="font-medium">{session.progress}%</span>
-                </div>
-                <div className="w-full bg-muted rounded-full h-2">
-                  <div
-                    className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${session.progress}%` }}
-                  ></div>
-                </div>
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                {session.status === "Active" && (
-                  <Button asChild className="flex-1 bg-indigo-600 hover:bg-indigo-700">
-                    <Link href={`/board-sessions/${session.id}`}>
-                      <Play className="h-4 w-4 mr-2" />
-                      Continue Session
-                    </Link>
-                  </Button>
-                )}
-                {session.status === "Scheduled" && (
-                  <Button asChild className="flex-1 bg-indigo-600 hover:bg-indigo-700">
-                    <Link href={`/board-sessions/${session.id}`}>
-                      <Play className="h-4 w-4 mr-2" />
-                      Start Session
-                    </Link>
-                  </Button>
-                )}
-                {session.status === "Completed" && (
-                  <Button asChild className="flex-1 bg-transparent" variant="outline">
-                    <Link href={`/decisions/${session.id}`}>View Decision Summary</Link>
-                  </Button>
-                )}
-                {session.status === "Draft" && (
-                  <Button asChild className="flex-1 bg-transparent" variant="outline">
-                    <Link href={`/scenarios/${session.id}`}>Edit Configuration</Link>
-                  </Button>
-                )}
-              </div>
+              <h3 className="text-lg font-semibold mb-2">No board sessions yet</h3>
+              <p className="text-muted-foreground mb-6 max-w-md">
+                Start by scheduling your first AI-powered executive consultation session to get strategic insights and recommendations.
+              </p>
+              <Button asChild className="bg-indigo-600 hover:bg-indigo-700">
+                <Link href="/board-sessions/schedule">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Schedule Your First Session
+                </Link>
+              </Button>
             </CardContent>
           </Card>
-        ))}
+        ) : (
+          boardSessions.map((session) => (
+            <Card key={session.id} className="hover:shadow-lg transition-all duration-200 border-l-4 border-l-indigo-500">
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1">
+                    <CardTitle className="text-xl">{session.title}</CardTitle>
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <Calendar className="h-4 w-4" />
+                        <ClientDate date={session.scheduledDate} />
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-4 w-4" />
+                        <span>
+                          <ClientDate date={session.scheduledDate} format="time" />
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Users className="h-4 w-4" />
+                        <span>{session.participants.length} participants</span>
+                      </div>
+                    </div>
+                  </div>
+                  <Badge className={statusColors[session.status]} variant="secondary">
+                    {session.status}
+                  </Badge>
+                </div>
+              </CardHeader>
+
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Scenario Type:</span>
+                  <Badge variant="outline">{session.scenario}</Badge>
+                </div>
+
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Duration:</span>
+                  <span className="font-medium">{session.duration}</span>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Progress:</span>
+                    <span className="font-medium">{session.progress}%</span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-2">
+                    <div
+                      className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${session.progress}%` }}
+                    ></div>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  {session.status === "Active" && (
+                    <Button asChild className="flex-1 bg-indigo-600 hover:bg-indigo-700">
+                      <Link href={`/board-sessions/${session.id}`}>
+                        <Play className="h-4 w-4 mr-2" />
+                        Continue Session
+                      </Link>
+                    </Button>
+                  )}
+                  {session.status === "Scheduled" && (
+                    <Button asChild className="flex-1 bg-indigo-600 hover:bg-indigo-700">
+                      <Link href={`/board-sessions/${session.id}`}>
+                        <Play className="h-4 w-4 mr-2" />
+                        Start Session
+                      </Link>
+                    </Button>
+                  )}
+                  {session.status === "Completed" && (
+                    <Button asChild className="flex-1 bg-transparent" variant="outline">
+                      <Link href={`/decisions/${session.id}`}>View Decision Summary</Link>
+                    </Button>
+                  )}
+                  {session.status === "Draft" && (
+                    <Button asChild className="flex-1 bg-transparent" variant="outline">
+                      <Link href={`/scenarios/${session.id}`}>Edit Configuration</Link>
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        )}
       </div>
     </div>
   )

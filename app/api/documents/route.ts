@@ -82,13 +82,30 @@ export async function POST(request: Request) {
     });
 
     // Save processed document to database using existing Document schema
+    // Only link to session if it exists, otherwise make it a global document
+    let finalSessionId: string | undefined = undefined;
+    
+    if (processedDocument.sessionId && processedDocument.sessionId !== 'global') {
+      // Verify session exists before creating document
+      const sessionExists = await prisma.boardroomSession.findUnique({
+        where: { id: processedDocument.sessionId }
+      });
+      
+      if (sessionExists) {
+        finalSessionId = processedDocument.sessionId;
+      } else {
+        console.log(`⚠️ Session ${processedDocument.sessionId} not found, creating as global document`);
+      }
+    }
+    
     const dbDocument = await prisma.document.create({
       data: {
         id: processedDocument.id,
+        ...(finalSessionId && { sessionId: finalSessionId }), // Only include if defined
+        userId: session.user.id, // Always link to the user who uploaded it
         name: processedDocument.fileName,
         type: processedDocument.fileType,
         url: `/documents/${processedDocument.id}`, // Virtual URL for now
-        sessionId: processedDocument.sessionId || 'global', // Use 'global' if no session
         metadata: JSON.stringify({
           fileName: processedDocument.fileName,
           fileSize: processedDocument.fileSize,
@@ -303,19 +320,20 @@ export async function GET(request: Request) {
     }
 
     // Get user's documents from database
+    const whereClause = {
+      userId: session.user.id, // Filter by userId for proper data persistence
+      ...(sessionId && { sessionId }) // Add sessionId filter if provided
+    };
+
     const userDocuments = await prisma.document.findMany({
-      where: {
-        metadata: {
-          contains: session.user.id // Check if user uploaded the document
-        }
-      },
+      where: whereClause,
       orderBy: {
         createdAt: 'desc'
       }
     });
 
-    // Format documents for response
-    const formattedDocuments = userDocuments.map(doc => {
+    // Format documents for response and apply category filter if needed
+    let formattedDocuments = userDocuments.map(doc => {
       const metadata = JSON.parse(doc.metadata || '{}');
       return {
         id: doc.id,
@@ -325,9 +343,16 @@ export async function GET(request: Request) {
         fileSize: metadata.fileSize || 0,
         status: 'processed',
         chunksCreated: metadata.chunksCreated || 0,
-        extractedTextLength: metadata.extractedTextLength || 0
+        extractedTextLength: metadata.extractedTextLength || 0,
+        sessionId: doc.sessionId,
+        description: metadata.description
       };
     });
+
+    // Apply category filter if specified
+    if (category) {
+      formattedDocuments = formattedDocuments.filter(doc => doc.category === category);
+    }
 
     return NextResponse.json({
       success: true,

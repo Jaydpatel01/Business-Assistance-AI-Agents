@@ -34,95 +34,6 @@ export const PREDEFINED_SCENARIOS: PredefinedScenario[] = [
     estimatedDuration: '45-60 min',
     defaultQuery: 'What are the key financial metrics we should evaluate before proceeding with this $2M investment opportunity?',
     recommendedAgents: ['ceo', 'cfo']
-  },
-  {
-    id: 'market-expansion-strategy',
-    name: 'International Market Expansion',
-    description: 'Analyze opportunities for expanding into European markets, including regulatory requirements, competitive analysis, and resource allocation.',
-    tags: ['expansion', 'international', 'compliance', 'strategy'],
-    parameters: {
-      targetMarkets: ['Germany', 'France', 'UK'],
-      timeline: '12-months',
-      budget: '$5M',
-      departments: ['Marketing', 'Legal', 'Operations']
-    },
-    status: 'draft',
-    category: 'strategic',
-    difficulty: 'advanced',
-    estimatedDuration: '50-65 min',
-    defaultQuery: 'What regulatory compliance requirements must we address for European market entry?',
-    recommendedAgents: ['ceo', 'cto']
-  },
-  {
-    id: 'cost-optimization-initiative',
-    name: 'Q4 Cost Optimization Initiative',
-    description: 'Identify cost reduction opportunities across all departments while maintaining operational efficiency and employee satisfaction.',
-    tags: ['cost-reduction', 'efficiency', 'operations', 'budget'],
-    parameters: {
-      targetSavings: '15%',
-      timeframe: '3-months',
-      departments: ['All Departments'],
-      constraints: ['No layoffs', 'Maintain quality']
-    },
-    status: 'draft',
-    category: 'operational',
-    difficulty: 'intermediate',
-    estimatedDuration: '30-40 min',
-    defaultQuery: 'What are the most effective cost reduction strategies that won\'t impact our service quality?',
-    recommendedAgents: ['cfo', 'ceo']
-  },
-  {
-    id: 'workforce-planning-restructuring',
-    name: 'Workforce Planning & Restructuring',
-    description: 'Strategic decisions around hiring, restructuring, and organizational changes to support business growth and efficiency.',
-    tags: ['hr', 'restructuring', 'talent', 'growth'],
-    parameters: {
-      timeline: '6-months',
-      departments: ['Technology', 'Sales', 'Operations'],
-      objectives: ['Increase efficiency', 'Support growth', 'Improve culture']
-    },
-    status: 'draft',
-    category: 'hr',
-    difficulty: 'advanced',
-    estimatedDuration: '40-55 min',
-    defaultQuery: 'How should we restructure our teams to support our growth objectives while maintaining employee morale?',
-    recommendedAgents: ['hr', 'ceo']
-  },
-  {
-    id: 'digital-transformation-roadmap',
-    name: 'Digital Transformation Roadmap',
-    description: 'Plan the digital transformation journey including technology upgrades, process automation, and cultural change management.',
-    tags: ['technology', 'transformation', 'automation', 'innovation'],
-    parameters: {
-      timeline: '18-months',
-      budget: '$3M',
-      priority: 'High',
-      departments: ['IT', 'Operations', 'Finance']
-    },
-    status: 'draft',
-    category: 'strategic',
-    difficulty: 'advanced',
-    estimatedDuration: '60-75 min',
-    defaultQuery: 'What should be our technology investment priorities for the next 18 months?',
-    recommendedAgents: ['cto', 'ceo']
-  },
-  {
-    id: 'customer-retention-strategy',
-    name: 'Customer Retention Enhancement',
-    description: 'Develop strategies to improve customer satisfaction, reduce churn, and increase customer lifetime value.',
-    tags: ['customer', 'retention', 'satisfaction', 'revenue'],
-    parameters: {
-      currentChurnRate: '8%',
-      targetReduction: '3%',
-      timeline: '9-months',
-      focus: ['Service Quality', 'Product Features', 'Support']
-    },
-    status: 'draft',
-    category: 'strategic',
-    difficulty: 'intermediate',
-    estimatedDuration: '35-45 min',
-    defaultQuery: 'What strategies can we implement to reduce customer churn by 3% over the next 9 months?',
-    recommendedAgents: ['ceo', 'cfo']
   }
 ];
 
@@ -133,9 +44,9 @@ export const PREDEFINED_SCENARIOS: PredefinedScenario[] = [
 export function getPredefinedScenarios(
   filters?: {
     status?: string;
-    tags?: string[];
     category?: string;
     difficulty?: string;
+    tags?: string[];
   }
 ): PredefinedScenario[] {
   let scenarios = [...PREDEFINED_SCENARIOS];
