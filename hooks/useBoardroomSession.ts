@@ -1,5 +1,7 @@
 import { useState, useCallback, useEffect } from "react"
 import { useToast } from "@/hooks/use-toast"
+import { useDemoMode } from "@/hooks/use-demo-mode"
+import { getDemoScenario } from "@/lib/demo/demo-scenarios"
 import { ExecutiveRole } from "@/types/executive"
 
 interface Message {
@@ -61,11 +63,33 @@ export function useBoardroomSession({
   initialData 
 }: UseBoardroomSessionOptions): UseBoardroomSessionReturn {
   const { toast } = useToast()
+  const { isDemo } = useDemoMode()
+  
+  // Extract demo scenario info from sessionId if it's a demo session
+  const isDemoSession = sessionId.startsWith('demo-')
+  // For demo-strategic-investment-analysis-timestamp, we need everything between 'demo-' and the last '-'
+  const scenarioId = isDemoSession ? 
+    sessionId.replace('demo-', '').replace(/-\d+$/, '') : null
+  const demoScenario = isDemoSession && scenarioId ? getDemoScenario(scenarioId) : null
+  
+  console.log('🔍 useBoardroomSession session analysis:', {
+    sessionId,
+    isDemoSession,
+    scenarioId,
+    demoScenario: demoScenario ? 'found' : 'not found',
+    isDemo
+  })
   
   const [sessionData, setSessionData] = useState<SessionData>({
     id: sessionId,
-    name: initialData?.name || "Executive Boardroom Session",
-    scenario: initialData?.scenario || {
+    name: demoScenario?.name 
+      ? `${demoScenario.name} - Demo Discussion`
+      : initialData?.name || "Executive Boardroom Session",
+    scenario: demoScenario ? {
+      id: demoScenario.id,
+      name: demoScenario.name,
+      description: demoScenario.description
+    } : initialData?.scenario || {
       id: "default",
       name: "Strategic Planning Session",
       description: "Collaborative executive decision-making session"
@@ -73,11 +97,11 @@ export function useBoardroomSession({
     status: initialData?.status || "active",
     messages: initialData?.messages || [],
     progress: initialData?.progress || 0,
-    activeAgents: initialData?.activeAgents || []
+    activeAgents: demoScenario?.recommendedAgents || initialData?.activeAgents || []
   })
 
   const [selectedAgents, setSelectedAgents] = useState<string[]>(
-    initialData?.activeAgents || [ExecutiveRole.CEO, ExecutiveRole.CFO]
+    demoScenario?.recommendedAgents || initialData?.activeAgents || [ExecutiveRole.CEO, ExecutiveRole.CFO]
   )
   const [isLoading, setIsLoading] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -98,6 +122,12 @@ export function useBoardroomSession({
         description: "Please enter a message and select at least one agent.",
         variant: "destructive"
       })
+      return
+    }
+
+    // Skip API calls for demo mode - demo streaming will handle responses
+    if (isDemoSession || isDemo) {
+      console.log('🎭 Demo mode: Skipping API call for sendMessage')
       return
     }
 
@@ -172,7 +202,7 @@ export function useBoardroomSession({
     } finally {
       setIsProcessing(false)
     }
-  }, [selectedAgents, sessionData.scenario, sessionId, toast])
+  }, [selectedAgents, sessionData.scenario, sessionId, toast, isDemoSession, isDemo])
 
   const toggleAgent = useCallback((agentId: string) => {
     setSelectedAgents(prev => 
@@ -222,6 +252,12 @@ export function useBoardroomSession({
   }, [sessionData, selectedAgents, toast])
 
   const refreshSession = useCallback(async () => {
+    // Skip API calls for demo mode
+    if (isDemoSession || isDemo) {
+      console.log('🎭 Demo mode: Skipping API call for refreshSession')
+      return
+    }
+
     setIsLoading(true)
     try {
       // In a real app, this would fetch session data from an API
@@ -243,7 +279,7 @@ export function useBoardroomSession({
     } finally {
       setIsLoading(false)
     }
-  }, [selectedAgents, toast])
+  }, [selectedAgents, toast, isDemoSession, isDemo])
 
   return {
     sessionData,

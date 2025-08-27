@@ -36,38 +36,122 @@ export async function GET(request: Request) {
           id: 'session-1',
           name: 'Q4 Budget Planning',
           scenario: {
-            id: 'scenario-1',
+            id: 'strategic-investment-analysis',
             name: 'Budget Allocation Strategy',
-            description: 'Planning Q4 budget allocation across departments'
+            description: 'Planning Q4 budget allocation across departments with focus on ROI optimization'
           },
           status: 'active',
           participants: [
-            { user: { name: 'Demo User', email: 'demo@user.com' }, role: 'facilitator' },
+            { user: { name: 'Demo User', email: 'demo@businessai.com' }, role: 'facilitator' },
             { user: { name: 'AI CEO Agent', email: 'ceo@ai.agent' }, role: 'participant' },
-            { user: { name: 'AI CFO Agent', email: 'cfo@ai.agent' }, role: 'participant' }
+            { user: { name: 'AI CFO Agent', email: 'cfo@ai.agent' }, role: 'participant' },
+            { user: { name: 'AI CTO Agent', email: 'cto@ai.agent' }, role: 'participant' }
           ],
           createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
           startedAt: new Date(Date.now() - 1 * 60 * 60 * 1000),
-          messageCount: 12,
-          decisionCount: 2
+          messageCount: 18,
+          decisionCount: 3
         },
         {
           id: 'session-2',
           name: 'Market Expansion Discussion',
           scenario: {
-            id: 'scenario-2',
+            id: 'market-expansion-strategy',
             name: 'European Market Entry',
-            description: 'Evaluating expansion opportunities in European markets'
+            description: 'Evaluating expansion opportunities in European markets with risk assessment'
           },
           status: 'completed',
           participants: [
-            { user: { name: 'Demo User', email: 'demo@user.com' }, role: 'facilitator' },
-            { user: { name: 'AI CTO Agent', email: 'cto@ai.agent' }, role: 'participant' }
+            { user: { name: 'Demo User', email: 'demo@businessai.com' }, role: 'facilitator' },
+            { user: { name: 'AI CEO Agent', email: 'ceo@ai.agent' }, role: 'participant' },
+            { user: { name: 'AI Marketing Agent', email: 'marketing@ai.agent' }, role: 'participant' },
+            { user: { name: 'AI CFO Agent', email: 'cfo@ai.agent' }, role: 'participant' }
           ],
-          createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
-          startedAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
-          endedAt: new Date(Date.now() - 22 * 60 * 60 * 1000),
-          messageCount: 8,
+          createdAt: new Date(Date.now() - 48 * 60 * 60 * 1000),
+          startedAt: new Date(Date.now() - 47 * 60 * 60 * 1000),
+          endedAt: new Date(Date.now() - 45 * 60 * 60 * 1000),
+          messageCount: 24,
+          decisionCount: 2
+        },
+        {
+          id: 'session-3',
+          name: 'Digital Transformation Initiative',
+          scenario: {
+            id: 'digital-transformation-roadmap',
+            name: 'Technology Modernization',
+            description: 'Comprehensive digital transformation strategy for next 18 months'
+          },
+          status: 'completed',
+          participants: [
+            { user: { name: 'Demo User', email: 'demo@businessai.com' }, role: 'facilitator' },
+            { user: { name: 'AI CTO Agent', email: 'cto@ai.agent' }, role: 'participant' },
+            { user: { name: 'AI HR Agent', email: 'hr@ai.agent' }, role: 'participant' },
+            { user: { name: 'AI CFO Agent', email: 'cfo@ai.agent' }, role: 'participant' }
+          ],
+          createdAt: new Date(Date.now() - 72 * 60 * 60 * 1000),
+          startedAt: new Date(Date.now() - 71 * 60 * 60 * 1000),
+          endedAt: new Date(Date.now() - 69 * 60 * 60 * 1000),
+          messageCount: 31,
+          decisionCount: 4
+        },
+        {
+          id: 'session-4',
+          name: 'Cost Optimization Review',
+          scenario: {
+            id: 'cost-optimization-initiative',
+            name: 'Operational Efficiency',
+            description: 'Identifying cost reduction opportunities without impacting quality'
+          },
+          status: 'scheduled',
+          participants: [
+            { user: { name: 'Demo User', email: 'demo@businessai.com' }, role: 'facilitator' },
+            { user: { name: 'AI CFO Agent', email: 'cfo@ai.agent' }, role: 'participant' },
+            { user: { name: 'AI Operations Agent', email: 'ops@ai.agent' }, role: 'participant' }
+          ],
+          createdAt: new Date(Date.now() - 12 * 60 * 60 * 1000),
+          scheduledDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
+          messageCount: 0,
+          decisionCount: 0
+        },
+        {
+          id: 'session-5',
+          name: 'Customer Retention Strategy',
+          scenario: {
+            id: 'customer-retention-strategy',
+            name: 'Customer Success Optimization',
+            description: 'Developing comprehensive customer retention and satisfaction initiatives'
+          },
+          status: 'completed',
+          participants: [
+            { user: { name: 'Demo User', email: 'demo@businessai.com' }, role: 'facilitator' },
+            { user: { name: 'AI Marketing Agent', email: 'marketing@ai.agent' }, role: 'participant' },
+            { user: { name: 'AI Customer Success Agent', email: 'cs@ai.agent' }, role: 'participant' },
+            { user: { name: 'AI CEO Agent', email: 'ceo@ai.agent' }, role: 'participant' }
+          ],
+          createdAt: new Date(Date.now() - 96 * 60 * 60 * 1000),
+          startedAt: new Date(Date.now() - 95 * 60 * 60 * 1000),
+          endedAt: new Date(Date.now() - 93 * 60 * 60 * 1000),
+          messageCount: 22,
+          decisionCount: 3
+        },
+        {
+          id: 'session-6',
+          name: 'Workforce Planning & Development',
+          scenario: {
+            id: 'workforce-planning-restructuring',
+            name: 'Team Restructuring',
+            description: 'Strategic workforce planning and skill development roadmap'
+          },
+          status: 'active',
+          participants: [
+            { user: { name: 'Demo User', email: 'demo@businessai.com' }, role: 'facilitator' },
+            { user: { name: 'AI HR Agent', email: 'hr@ai.agent' }, role: 'participant' },
+            { user: { name: 'AI CEO Agent', email: 'ceo@ai.agent' }, role: 'participant' },
+            { user: { name: 'AI CFO Agent', email: 'cfo@ai.agent' }, role: 'participant' }
+          ],
+          createdAt: new Date(Date.now() - 8 * 60 * 60 * 1000),
+          startedAt: new Date(Date.now() - 6 * 60 * 60 * 1000),
+          messageCount: 15,
           decisionCount: 1
         }
       ];

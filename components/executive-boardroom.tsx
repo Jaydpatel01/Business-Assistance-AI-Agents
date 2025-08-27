@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, useCallback } from "react"
+import { useMemo, useState, useCallback, useEffect } from "react"
 import { BoardroomHeader } from "@/components/boardroom/BoardroomHeader"
 import { StreamingMessageList } from "@/components/boardroom/StreamingMessageList"
 import { MessageInput } from "@/components/boardroom/MessageInput"
@@ -13,6 +13,9 @@ import { DecisionRecommendation } from "@/lib/ai/decision-engine"
 import { LiveParticipants } from "@/components/live-participants"
 import { useStreamingBoardroom } from "@/hooks/use-streaming-boardroom"
 import { useBoardroomSession } from "@/hooks/useBoardroomSession"
+import { useDemoStreaming } from "@/hooks/use-demo-streaming"
+import { useDemoMode } from "@/hooks/use-demo-mode"
+import { getDemoScenario } from "@/lib/demo/demo-scenarios"
 import { ExecutiveRole } from "@/types/executive"
 import { Button } from "@/components/ui/button"
 import { StopCircle } from "lucide-react"
@@ -59,12 +62,14 @@ export function ExecutiveBoardroom({ sessionId }: ExecutiveBoardroomProps) {
   const [decisionRecommendation, setDecisionRecommendation] = useState<DecisionRecommendation | null>(null)
   const [selectedAgents, setSelectedAgents] = useState<string[]>([ExecutiveRole.CEO, ExecutiveRole.CFO])
   
+  const { isDemo } = useDemoMode()
+  
   const {
     sessionData,
     exportSummary
   } = useBoardroomSession({ sessionId })
 
-  // Use streaming boardroom hook
+  // Use streaming boardroom hook for production
   const {
     state: streamingState,
     startStreamingDiscussion,
@@ -77,6 +82,56 @@ export function ExecutiveBoardroom({ sessionId }: ExecutiveBoardroomProps) {
       console.log('Session completed:', sessionId)
     }
   })
+
+  // Use demo streaming hook for demo mode
+  const {
+    state: demoState,
+    startDemoDiscussion,
+    stopStreaming: stopDemoStreaming,
+  } = useDemoStreaming({
+    onMessageComplete: (message) => {
+      console.log('Demo message completed:', message)
+    },
+    onSessionComplete: (sessionId) => {
+      console.log('Demo session completed:', sessionId)
+    }
+  })
+
+  // Use appropriate state based on demo mode
+  const currentState = isDemo ? demoState : streamingState
+  const currentStopFunction = isDemo ? stopDemoStreaming : stopStreaming
+
+  // Auto-select agents for demo mode based on scenario
+  useEffect(() => {
+    console.log('🔍 ExecutiveBoardroom agent selection effect triggered')
+    console.log('- isDemo:', isDemo)
+    console.log('- sessionData?.scenario?.id:', sessionData?.scenario?.id)
+    console.log('- current selectedAgents:', selectedAgents)
+    
+    // Check URL for demo mode as well
+    const isDemoFromUrl = typeof window !== 'undefined' && (
+      window.location.search.includes('demo=true') || 
+      window.location.pathname.includes('/demo-')
+    )
+    
+    console.log('- isDemoFromUrl:', isDemoFromUrl)
+    
+    if ((isDemo || isDemoFromUrl) && sessionData?.scenario?.id) {
+      const demoScenario = getDemoScenario(sessionData.scenario.id)
+      console.log('- demoScenario found:', demoScenario ? 'yes' : 'no')
+      
+      if (demoScenario && demoScenario.recommendedAgents.length > 0) {
+        // Only set agents if they're different to avoid loops
+        const currentAgentsStr = selectedAgents.sort().join(',')
+        const newAgentsStr = demoScenario.recommendedAgents.sort().join(',')
+        
+        if (currentAgentsStr !== newAgentsStr) {
+          console.log('🎭 Auto-selecting agents for demo:', demoScenario.recommendedAgents)
+          setSelectedAgents(demoScenario.recommendedAgents)
+        }
+      }
+    }
+  }, [isDemo, sessionData?.scenario?.id, selectedAgents])
 
   // Function to analyze decision with AI
   const handleDecisionAnalysis = useCallback(async () => {
@@ -119,8 +174,8 @@ export function ExecutiveBoardroom({ sessionId }: ExecutiveBoardroomProps) {
 
   // Calculate progress data based on streaming state
   const progressData = useMemo(() => {
-    const messageCount = streamingState.messages.length
-    const completedAgentMessages = streamingState.messages.filter(msg => 
+    const messageCount = currentState.messages.length
+    const completedAgentMessages = currentState.messages.filter(msg => 
       msg.agentType !== 'user' && msg.isComplete
     ).length
     
@@ -136,7 +191,7 @@ export function ExecutiveBoardroom({ sessionId }: ExecutiveBoardroomProps) {
                   : progress < 95 ? 'synthesis'
                   : 'summary'
     }
-  }, [streamingState.messages, selectedAgents])
+  }, [currentState.messages, selectedAgents])
 
   // Remove unused variables and fix TypeScript errors
   const handleAgentToggle = useCallback((agentId: string) => {
@@ -149,33 +204,79 @@ export function ExecutiveBoardroom({ sessionId }: ExecutiveBoardroomProps) {
 
   // Wrapper function to start streaming discussion
   const handleSendMessage = useCallback(async (message: string) => {
+    console.log('🔍 handleSendMessage called with:', message)
+    console.log('- selectedAgents:', selectedAgents)
+    console.log('- isDemo:', isDemo)
+    console.log('- sessionData.scenario?.id:', sessionData.scenario?.id)
+    
     if (selectedAgents.length === 0) {
+      console.log('❌ No agents selected, returning')
       return
     }
 
-    // Build conversation history from current messages
-    const conversationHistory = streamingState.messages
-      .filter(msg => msg.agentType !== 'user' && msg.agentType !== 'system' && msg.isComplete)
-      .map(msg => ({
-        agentType: msg.agentType,
-        content: msg.content,
-        timestamp: msg.timestamp.toISOString()
-      }))
+    // Check URL for demo mode as well
+    const isDemoFromUrl = typeof window !== 'undefined' && (
+      window.location.search.includes('demo=true') || 
+      window.location.pathname.includes('/demo-')
+    )
+    
+    console.log('- isDemoFromUrl:', isDemoFromUrl)
 
-    await startStreamingDiscussion({
-      scenario: sessionData.scenario,
-      query: message,
-      includeAgents: selectedAgents,
-      sessionId: sessionId,
-      selectedDocuments,
-      conversationHistory,
-      maxRounds: 3, // Allow up to 3 rounds of discussion
-      autoConclusion: true // Enable auto-conclusion when agents reach recommendations
-    })
-  }, [selectedAgents, streamingState.messages, startStreamingDiscussion, sessionData.scenario, sessionId, selectedDocuments])
+    if (isDemo || isDemoFromUrl) {
+      console.log('🎭 Demo mode: Starting demo discussion')
+      // Use demo streaming with pre-written responses
+      await startDemoDiscussion(message, selectedAgents, sessionData.scenario?.id)
+    } else {
+      console.log('🔄 Production mode: Starting streaming discussion')
+      // Build conversation history from current messages
+      const conversationHistory = streamingState.messages
+        .filter(msg => msg.agentType !== 'user' && msg.agentType !== 'system' && msg.isComplete)
+        .map(msg => ({
+          agentType: msg.agentType,
+          content: msg.content,
+          timestamp: msg.timestamp.toISOString()
+        }))
+
+      await startStreamingDiscussion({
+        scenario: sessionData.scenario,
+        query: message,
+        includeAgents: selectedAgents,
+        sessionId: sessionId,
+        selectedDocuments,
+        conversationHistory,
+        maxRounds: 3, // Allow up to 3 rounds of discussion
+        autoConclusion: true // Enable auto-conclusion when agents reach recommendations
+      })
+    }
+  }, [isDemo, selectedAgents, startDemoDiscussion, sessionData.scenario, streamingState.messages, startStreamingDiscussion, sessionId, selectedDocuments])
 
   return (
     <div className="container mx-auto py-6 space-y-6">
+      {/* Demo Mode Banner - show if URL indicates demo or traditional demo mode */}
+      {(isDemo || (typeof window !== 'undefined' && (window.location.search.includes('demo=true') || window.location.pathname.includes('/demo-')))) && (
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+          <div className="flex items-center gap-3">
+            <div className="flex-shrink-0">
+              <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
+                🎭
+              </div>
+            </div>
+            <div>
+              <h3 className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                Demo Mode Active
+              </h3>
+              <p className="text-sm text-blue-700 dark:text-blue-300">
+                You're experiencing a demo with pre-written responses. All data is simulated and not saved.
+                <br />
+                <span className="text-xs opacity-75">
+                  Session ID: {sessionId} | Scenario: {sessionData.scenario?.id} | Selected Agents: {selectedAgents.join(', ')}
+                </span>
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Session Header */}
       <BoardroomHeader 
         sessionId={sessionId}
@@ -185,7 +286,7 @@ export function ExecutiveBoardroom({ sessionId }: ExecutiveBoardroomProps) {
         status={'active' as 'preparing' | 'active' | 'completed' | 'paused'}
         startTime={new Date()}
         participantCount={selectedAgents.length}
-        messageCount={streamingState.messages.length}
+        messageCount={currentState.messages.length}
         progress={progressData.progress}
         onExport={exportSummary}
       />
@@ -203,16 +304,16 @@ export function ExecutiveBoardroom({ sessionId }: ExecutiveBoardroomProps) {
 
           {/* Message List - Streaming */}
           <StreamingMessageList
-            messages={streamingState.messages}
-            currentAgent={streamingState.currentAgent}
-            isStreaming={streamingState.isStreaming}
+            messages={currentState.messages}
+            currentAgent={currentState.currentAgent}
+            isStreaming={currentState.isStreaming}
           />
 
           {/* Stop Streaming Button */}
-          {streamingState.isStreaming && (
+          {currentState.isStreaming && (
             <div className="flex justify-center">
               <Button
-                onClick={stopStreaming}
+                onClick={currentStopFunction}
                 variant="outline"
                 className="flex items-center gap-2"
               >
@@ -245,15 +346,18 @@ export function ExecutiveBoardroom({ sessionId }: ExecutiveBoardroomProps) {
           {/* Message Input */}
           <MessageInput
             onSendMessage={handleSendMessage}
-            isLoading={streamingState.isStreaming}
+            isLoading={currentState.isStreaming}
             disabled={selectedAgents.length === 0}
             placeholder={
               selectedAgents.length === 0 
                 ? "Please select at least one executive agent first..."
-                : streamingState.isStreaming
+                : currentState.isStreaming
                 ? "Discussion in progress..."
                 : "Ask a strategic question to begin the executive discussion..."
             }
+            sessionData={sessionData}
+            selectedAgents={selectedAgents}
+            onAgentsChange={setSelectedAgents}
           />
         </div>
 

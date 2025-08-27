@@ -42,10 +42,37 @@ export default function SettingsPage() {
     emailNotifications: true,
   })
 
+  // Check if user is in demo mode
+  const isDemoUser = session?.user?.email === 'demo@businessai.com' || 
+                     session?.user?.email === 'demo@user.com' || 
+                     session?.user?.name === 'Demo User'
+
   // Load user profile data
   useEffect(() => {
     const fetchProfile = async () => {
       try {
+        // Use demo data for demo users
+        if (isDemoUser) {
+          const demoProfile = {
+            id: "demo-user-id",
+            name: "Demo User",
+            email: "demo@businessai.com",
+            company: "TechCorp Inc.",
+            role: "Executive",
+            image: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          }
+          
+          setProfile(demoProfile)
+          setFormData({
+            name: demoProfile.name,
+            company: demoProfile.company,
+          })
+          setIsLoading(false)
+          return
+        }
+
         const response = await fetch("/api/user/profile")
         if (response.ok) {
           const data = await response.json()
@@ -78,7 +105,7 @@ export default function SettingsPage() {
     } else {
       setIsLoading(false)
     }
-  }, [session, toast])
+  }, [session, toast, isDemoUser])
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -91,6 +118,27 @@ export default function SettingsPage() {
   const handleSave = async () => {
     setIsSaving(true)
     try {
+      // Handle demo mode saving (simulate success)
+      if (isDemoUser) {
+        // Simulate API delay
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        
+        // Update local state
+        setProfile(prev => prev ? {
+          ...prev,
+          name: formData.name,
+          company: formData.company,
+          updatedAt: new Date().toISOString()
+        } : null)
+        
+        toast({
+          title: "Demo Mode",
+          description: "Profile changes simulated successfully (demo mode)",
+        })
+        setIsSaving(false)
+        return
+      }
+
       const response = await fetch("/api/user/profile", {
         method: "PUT",
         headers: {

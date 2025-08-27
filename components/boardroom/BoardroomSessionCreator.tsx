@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useState, useEffect, useRef } from "react"
+import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,6 +11,8 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Loader2, Users, Brain, Target, FileText } from "lucide-react"
 import { useOnboarding } from "../../hooks/use-onboarding"
+import { useDemoMode } from "../../hooks/use-demo-mode"
+import { getDemoScenario } from "../../lib/demo/demo-scenarios"
 
 interface Scenario {
   id: string
@@ -54,8 +56,11 @@ const AVAILABLE_AGENTS = [
 export function BoardroomSessionCreator() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const pathname = usePathname()
   const scenarioId = searchParams?.get('scenario')
   const { markStepCompleted } = useOnboarding()
+  const { isDemo } = useDemoMode()
+  const hasRedirected = useRef(false)
 
   const [sessionName, setSessionName] = useState('')
   const [sessionDescription, setSessionDescription] = useState('')
@@ -63,6 +68,45 @@ export function BoardroomSessionCreator() {
   const [scenario, setScenario] = useState<Scenario | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingScenario, setIsLoadingScenario] = useState(false)
+  const [isCreating, setIsCreating] = useState(false)
+
+  // Auto-redirect demo users directly to boardroom
+  useEffect(() => {
+    console.log('🔍 BoardroomSessionCreator useEffect triggered')
+    console.log('- isDemo:', isDemo)
+    console.log('- scenarioId:', scenarioId)
+    console.log('- pathname:', pathname)
+    console.log('- hasRedirected.current:', hasRedirected.current)
+    
+    // Only redirect if we're on the /boardroom/new page (not already on a session page)
+    if (isDemo && scenarioId && !hasRedirected.current && pathname === '/boardroom/new') {
+      const demoScenario = getDemoScenario(scenarioId)
+      console.log('- demoScenario:', demoScenario ? 'found' : 'not found')
+      
+      if (demoScenario) {
+        console.log('🎭 Demo mode: Redirecting directly to boardroom')
+        hasRedirected.current = true // Prevent multiple redirects
+        
+        // Show loading state for demo users
+        setIsCreating(true)
+        
+        // Create a demo session ID and redirect with a brief delay
+        const demoSessionId = `demo-${scenarioId}-${Date.now()}`
+        console.log('- Creating demo session ID:', demoSessionId)
+        
+        // Mark onboarding step as completed for demo users
+        markStepCompleted('start-discussion')
+        
+        // Brief delay to show loading state, then redirect
+        setTimeout(() => {
+          const redirectUrl = `/boardroom/${demoSessionId}?demo=true&scenario=${scenarioId}`
+          console.log('🚀 Redirecting to:', redirectUrl)
+          router.push(redirectUrl)
+        }, 800) // Reduced delay for better UX
+        return
+      }
+    }
+  }, [isDemo, scenarioId, pathname, router, markStepCompleted])
 
   useEffect(() => {
     const loadScenario = async (id: string) => {
@@ -140,7 +184,10 @@ export function BoardroomSessionCreator() {
 
     setIsLoading(true)
     try {
-      const response = await fetch('/api/boardroom/sessions', {
+      const apiEndpoint = isDemo ? '/api/demo/sessions' : '/api/boardroom/sessions'
+      console.log(`📡 Creating session using ${isDemo ? 'demo' : 'production'} API`)
+      
+      const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -161,7 +208,11 @@ export function BoardroomSessionCreator() {
           markStepCompleted('start-discussion')
           
           // Navigate to the created session
-          router.push(`/boardroom/${result.data.sessionId}`)
+          const sessionPath = isDemo 
+            ? `/boardroom/${result.data.sessionId}?demo=true&scenario=${scenarioId}`
+            : `/boardroom/${result.data.sessionId}`
+          
+          router.push(sessionPath)
         } else {
           throw new Error(result.error || 'Failed to create session')
         }
@@ -175,6 +226,34 @@ export function BoardroomSessionCreator() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // Show demo loading screen while redirecting
+  if (isDemo && isCreating) {
+    return (
+      <div className="max-w-2xl mx-auto space-y-6">
+        <Card>
+          <CardContent className="py-12">
+            <div className="text-center space-y-4">
+              <div className="flex justify-center">
+                <div className="w-16 h-16 bg-gradient-to-r from-blue-100 to-indigo-100 dark:from-blue-900 dark:to-indigo-900 rounded-full flex items-center justify-center">
+                  <span className="text-2xl">🎭</span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-lg font-semibold">Setting up your demo experience...</h3>
+                <p className="text-muted-foreground">
+                  Preparing the boardroom with pre-filled scenario data and AI agents
+                </p>
+              </div>
+              <div className="flex justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (

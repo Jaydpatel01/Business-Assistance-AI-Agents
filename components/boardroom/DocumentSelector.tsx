@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Search, FileText, BarChart3, Filter, RefreshCw } from 'lucide-react'
+import { useDemoMode } from '@/hooks/use-demo-mode'
 
 interface Document {
   id: string
@@ -14,6 +15,42 @@ interface Document {
   fileSize: number
   status?: string
 }
+
+// Mock documents for demo mode - moved outside component
+const DEMO_DOCUMENTS: Document[] = [
+  {
+    id: '1',
+    fileName: 'Q3 Financial Report.pdf',
+    category: 'financial',
+    uploadedAt: '2025-01-15',
+    fileSize: 2048576,
+    status: 'processed'
+  },
+  {
+    id: '2',
+    fileName: 'Strategic Plan 2025.docx',
+    category: 'strategic',
+    uploadedAt: '2025-01-10',
+    fileSize: 1536000,
+    status: 'processed'
+  },
+  {
+    id: '3',
+    fileName: 'Market Analysis Report.xlsx',
+    category: 'strategic',
+    uploadedAt: '2025-01-08',
+    fileSize: 3072000,
+    status: 'processed'
+  },
+  {
+    id: '4',
+    fileName: 'Tech Infrastructure Review.pdf',
+    category: 'technical',
+    uploadedAt: '2025-01-05',
+    fileSize: 4096000,
+    status: 'processed'
+  }
+]
 
 interface DocumentSelectorProps {
   selectedDocuments?: string[]
@@ -26,6 +63,7 @@ export function DocumentSelector({
   onDocumentSelectionChange,
   maxDocuments = 10 
 }: DocumentSelectorProps) {
+  const { isDemo } = useDemoMode()
   const [documents, setDocuments] = useState<Document[]>([])
   const [filteredDocuments, setFilteredDocuments] = useState<Document[]>([])
   const [searchTerm, setSearchTerm] = useState('')
@@ -45,6 +83,20 @@ export function DocumentSelector({
   useEffect(() => {
     const loadDocuments = async () => {
       setIsLoading(true)
+      
+      // Check if demo mode (URL-based detection too)
+      const isDemoFromUrl = typeof window !== 'undefined' && (
+        window.location.search.includes('demo=true') || 
+        window.location.pathname.includes('/demo-')
+      )
+      
+      if (isDemo || isDemoFromUrl) {
+        console.log('🎭 Demo mode: Using mock documents instead of API call')
+        setDocuments(DEMO_DOCUMENTS)
+        setIsLoading(false)
+        return
+      }
+      
       try {
         const response = await fetch('/api/documents')
         if (response.ok) {
@@ -86,7 +138,7 @@ export function DocumentSelector({
     }
 
     loadDocuments()
-  }, [])
+  }, [isDemo]) // Only depend on isDemo
 
   // Filter documents based on search and category
   useEffect(() => {

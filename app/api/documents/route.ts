@@ -164,7 +164,7 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     // Authentication check
     const session = await getServerSession(authOptions);
@@ -173,6 +173,133 @@ export async function GET() {
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
+    }
+
+    const { searchParams } = new URL(request.url);
+    const sessionId = searchParams.get('sessionId');
+    const category = searchParams.get('category');
+
+    // Check if this is a demo user
+    const isDemoUser = session.user.email === 'demo@businessai.com' || 
+                       session.user.email === 'demo@user.com' || 
+                       session.user.name === 'Demo User';
+
+    if (isDemoUser) {
+      // Return comprehensive demo documents
+      const demoDocuments = [
+        {
+          id: 'doc-1',
+          fileName: 'Q4 Financial Report 2024.pdf',
+          category: 'financial',
+          uploadedAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+          fileSize: 2456789,
+          status: 'processed',
+          chunksCreated: 42,
+          extractedTextLength: 15847,
+          sessionId: 'session-1',
+          description: 'Comprehensive Q4 financial performance analysis'
+        },
+        {
+          id: 'doc-2',
+          fileName: 'Market Research - European Expansion.docx',
+          category: 'strategic',
+          uploadedAt: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
+          fileSize: 1234567,
+          status: 'processed',
+          chunksCreated: 28,
+          extractedTextLength: 12456,
+          sessionId: 'session-2',
+          description: 'Detailed market analysis for European expansion strategy'
+        },
+        {
+          id: 'doc-3',
+          fileName: 'Technology Stack Assessment.xlsx',
+          category: 'technical',
+          uploadedAt: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
+          fileSize: 876543,
+          status: 'processed',
+          chunksCreated: 15,
+          extractedTextLength: 8932,
+          sessionId: 'session-3',
+          description: 'Current technology infrastructure and modernization recommendations'
+        },
+        {
+          id: 'doc-4',
+          fileName: 'Employee Satisfaction Survey 2024.pdf',
+          category: 'hr',
+          uploadedAt: new Date(Date.now() - 96 * 60 * 60 * 1000).toISOString(),
+          fileSize: 654321,
+          status: 'processed',
+          chunksCreated: 22,
+          extractedTextLength: 11234,
+          sessionId: 'session-6',
+          description: 'Annual employee satisfaction and engagement survey results'
+        },
+        {
+          id: 'doc-5',
+          fileName: 'Competitive Analysis Report.pptx',
+          category: 'strategic',
+          uploadedAt: new Date(Date.now() - 120 * 60 * 60 * 1000).toISOString(),
+          fileSize: 3456789,
+          status: 'processed',
+          chunksCreated: 56,
+          extractedTextLength: 18765,
+          sessionId: 'session-2',
+          description: 'Comprehensive competitive landscape analysis'
+        },
+        {
+          id: 'doc-6',
+          fileName: 'Customer Feedback Analysis.json',
+          category: 'general',
+          uploadedAt: new Date(Date.now() - 144 * 60 * 60 * 1000).toISOString(),
+          fileSize: 234567,
+          status: 'processed',
+          chunksCreated: 8,
+          extractedTextLength: 5643,
+          sessionId: 'session-5',
+          description: 'Aggregated customer feedback and sentiment analysis'
+        },
+        {
+          id: 'doc-7',
+          fileName: 'Budget Allocation Proposal 2025.xlsx',
+          category: 'financial',
+          uploadedAt: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
+          fileSize: 567890,
+          status: 'processed',
+          chunksCreated: 12,
+          extractedTextLength: 7234,
+          sessionId: 'session-1',
+          description: '2025 budget allocation across departments and initiatives'
+        },
+        {
+          id: 'doc-8',
+          fileName: 'Risk Assessment Matrix.pdf',
+          category: 'general',
+          uploadedAt: new Date(Date.now() - 36 * 60 * 60 * 1000).toISOString(),
+          fileSize: 445566,
+          status: 'processed',
+          chunksCreated: 18,
+          extractedTextLength: 9876,
+          sessionId: 'session-4',
+          description: 'Comprehensive business risk assessment and mitigation strategies'
+        }
+      ];
+
+      // Filter by category if specified
+      let filteredDocuments = demoDocuments;
+      if (category) {
+        filteredDocuments = demoDocuments.filter(doc => doc.category === category);
+      }
+      if (sessionId) {
+        filteredDocuments = filteredDocuments.filter(doc => doc.sessionId === sessionId);
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: filteredDocuments,
+        userType: 'demo',
+        message: `Found ${filteredDocuments.length} demo documents`
+      });
     }
 
     // Get user's documents from database
