@@ -1,7 +1,5 @@
 import { useState, useCallback, useEffect } from "react"
 import { useToast } from "@/hooks/use-toast"
-import { useDemoMode } from "@/hooks/use-demo-mode"
-import { getDemoScenario } from "@/lib/demo/demo-scenarios"
 import { ExecutiveRole } from "@/types/executive"
 
 interface Message {
@@ -73,45 +71,23 @@ export function useBoardroomSession({
   initialData 
 }: UseBoardroomSessionOptions): UseBoardroomSessionReturn {
   const { toast } = useToast()
-  const { isDemo } = useDemoMode()
-  
-  // Extract demo scenario info from sessionId if it's a demo session
-  const isDemoSession = sessionId.startsWith('demo-')
-  // For demo-strategic-investment-analysis-timestamp, we need everything between 'demo-' and the last '-'
-  const scenarioId = isDemoSession ? 
-    sessionId.replace('demo-', '').replace(/-\d+$/, '') : null
-  const demoScenario = isDemoSession && scenarioId ? getDemoScenario(scenarioId) : null
-  
-  console.log('🔍 useBoardroomSession session analysis:', {
-    sessionId,
-    isDemoSession,
-    scenarioId,
-    demoScenario: demoScenario ? 'found' : 'not found',
-    isDemo
-  })
   
   const [sessionData, setSessionData] = useState<SessionData>({
     id: sessionId,
-    name: demoScenario?.name 
-      ? `${demoScenario.name} - Demo Discussion`
-      : initialData?.name || "Executive Boardroom Session",
-    scenario: demoScenario ? {
-      id: demoScenario.id,
-      name: demoScenario.name,
-      description: demoScenario.description
-    } : initialData?.scenario || {
+    name: initialData?.name || "Executive Boardroom Session",
+    scenario: initialData?.scenario || {
       id: "default",
-      name: "Strategic Planning Session",
+      name: "Business Strategy Discussion",
       description: "Collaborative executive decision-making session"
     },
     status: initialData?.status || "active",
     messages: initialData?.messages || [],
     progress: initialData?.progress || 0,
-    activeAgents: demoScenario?.recommendedAgents || initialData?.activeAgents || []
+    activeAgents: initialData?.activeAgents || []
   })
 
   const [selectedAgents, setSelectedAgents] = useState<string[]>(
-    demoScenario?.recommendedAgents || initialData?.activeAgents || [ExecutiveRole.CEO, ExecutiveRole.CFO]
+    initialData?.activeAgents || [ExecutiveRole.CEO, ExecutiveRole.CFO]
   )
   const [isLoading, setIsLoading] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -123,12 +99,6 @@ export function useBoardroomSession({
         description: "Please enter a message and select at least one agent.",
         variant: "destructive"
       })
-      return
-    }
-
-    // Skip API calls for demo mode - demo streaming will handle responses
-    if (isDemoSession || isDemo) {
-      console.log('🎭 Demo mode: Skipping API call for sendMessage')
       return
     }
 
@@ -203,7 +173,7 @@ export function useBoardroomSession({
     } finally {
       setIsProcessing(false)
     }
-  }, [selectedAgents, sessionData.scenario, sessionId, toast, isDemoSession, isDemo])
+  }, [selectedAgents, sessionData.scenario, sessionId, toast])
 
   const toggleAgent = useCallback((agentId: string) => {
     setSelectedAgents(prev => 
@@ -215,92 +185,109 @@ export function useBoardroomSession({
 
   const exportSummary = useCallback(async () => {
     try {
-      // Generate summary data
-      const summaryData = {
-        sessionId: sessionData.id,
-        sessionName: sessionData.name,
-        scenario: sessionData.scenario,
-        messages: sessionData.messages,
-        participants: selectedAgents,
-        timestamp: new Date().toISOString()
+      toast({
+        title: "Generating Report",
+        description: "Your boardroom session report is being prepared...",
+      })
+
+      const response = await fetch('/api/boardroom/export', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sessionId: sessionData.id,
+          format: 'pdf',
+          options: {
+            includeTranscript: true,
+            includeReasoning: true,
+            includeCitations: true,
+            maxMessages: 50,
+          },
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to generate PDF')
       }
 
-      // Create and download file
-      const blob = new Blob([JSON.stringify(summaryData, null, 2)], {
-        type: 'application/json'
-      })
-      const url = URL.createObjectURL(blob)
+      // Download the PDF
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `boardroom-session-${sessionData.id}-${Date.now()}.json`
+      a.download = `boardroom-session-${sessionData.id.substring(0, 8)}-${new Date().toISOString().split('T')[0]}.pdf`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      window.URL.revokeObjectURL(url)
 
       toast({
-        title: "Summary Exported",
-        description: "Session summary has been downloaded successfully."
+        title: "Report Downloaded",
+        description: "Session report has been downloaded successfully as PDF."
       })
     } catch (error) {
       console.error('Error exporting summary:', error)
       toast({
         title: "Export Failed",
-        description: "Failed to export session summary",
+        description: "Failed to export session summary. Please try again.",
         variant: "destructive"
       })
     }
-  }, [sessionData, selectedAgents, toast])
+  }, [sessionData, toast])
 
   const refreshSession = useCallback(async () => {
-    // Skip API calls for demo mode
-    if (isDemoSession || isDemo) {
-      console.log('🎭 Demo mode: Skipping API call for refreshSession')
-      return
-    }
-
     setIsLoading(true)
     try {
-      console.log(`🔄 Loading session data and messages for session ${sessionId}`)
+      console.log(`🔄 Loading session data for session ${sessionId}`)
       
-      // Fetch session data and messages in parallel
-      const [sessionResponse, messagesResponse] = await Promise.all([
-        fetch(`/api/boardroom/sessions?sessionId=${sessionId}`),
-        fetch(`/api/boardroom/sessions/${sessionId}/messages`)
-      ])
+      // Fetch session data (includes messages)
+      const sessionResponse = await fetch(`/api/boardroom/sessions/${sessionId}`)
       
-      if (!sessionResponse.ok || !messagesResponse.ok) {
+      if (!sessionResponse.ok) {
+        if (sessionResponse.status === 404) {
+          throw new Error('Session not found or access denied')
+        }
         throw new Error('Failed to fetch session data')
       }
       
       const sessionResult = await sessionResponse.json()
-      const messagesResult = await messagesResponse.json()
       
-      if (sessionResult.success && messagesResult.success) {
-        // Update session data with fetched information
-        const sessionInfo = sessionResult.data?.[0] // Get first session from list
-        if (sessionInfo) {
-          setSessionData(prev => ({
-            ...prev,
-            id: sessionInfo.id,
-            name: sessionInfo.name,
-            scenario: sessionInfo.scenario || prev.scenario,
-            status: sessionInfo.status,
-            // Convert API messages to our Message format
-            messages: messagesResult.data.map((msg: ApiMessage) => ({
-              id: msg.id,
-              agentType: msg.agentType || 'user',
-              content: msg.content,
-              timestamp: new Date(msg.createdAt),
-              reasoning: msg.metadata?.reasoning
-            }))
-          }))
-          
-          console.log(`✅ Loaded ${messagesResult.data.length} previous messages`)
+      if (sessionResult.success && sessionResult.data) {
+        const sessionInfo = sessionResult.data
+        
+        // Parse agents from the session if available
+        let parsedAgents: string[] = [];
+        if (sessionInfo.agents) {
+          try {
+            parsedAgents = JSON.parse(sessionInfo.agents);
+            console.log(`✅ Loaded ${parsedAgents.length} agents from session:`, parsedAgents);
+          } catch (e) {
+            console.error('Failed to parse agents from session:', e);
+          }
         }
+        
+        setSessionData(prev => ({
+          ...prev,
+          id: sessionInfo.id,
+          name: sessionInfo.name,
+          scenario: sessionInfo.scenario || prev.scenario,
+          status: sessionInfo.status,
+          activeAgents: parsedAgents.length > 0 ? parsedAgents : prev.activeAgents,
+          // Convert API messages to our Message format
+          messages: (sessionInfo.messages || []).map((msg: ApiMessage) => ({
+            id: msg.id,
+            agentType: msg.agentType || 'user',
+            content: msg.content,
+            timestamp: new Date(msg.createdAt),
+            reasoning: msg.metadata?.reasoning
+          }))
+        }))
+        
+        console.log(`✅ Loaded session with ${sessionInfo.messages?.length || 0} messages`)
       }
       
-      // Update session data if needed
+      // Update active agents
       setSessionData(prev => ({
         ...prev,
         activeAgents: selectedAgents
@@ -308,14 +295,14 @@ export function useBoardroomSession({
     } catch (error) {
       console.error('Error refreshing session:', error)
       toast({
-        title: "Refresh Failed",
-        description: "Failed to refresh session data",
+        title: "Session Load Failed",
+        description: error instanceof Error ? error.message : "Failed to load session data",
         variant: "destructive"
       })
     } finally {
       setIsLoading(false)
     }
-  }, [sessionId, selectedAgents, toast, isDemoSession, isDemo])
+  }, [sessionId, selectedAgents, toast])
 
   // Initialize session data and load previous messages
   useEffect(() => {
@@ -327,11 +314,11 @@ export function useBoardroomSession({
       activeAgents: selectedAgents
     }))
     
-    // Load previous messages for existing sessions (not demo sessions)
-    if (!isDemoSession && !isDemo && sessionId && sessionId !== 'new') {
+    // Load previous messages for existing sessions
+    if (sessionId && sessionId !== 'new') {
       refreshSession()
     }
-  }, [sessionId, selectedAgents, isDemoSession, isDemo, refreshSession])
+  }, [sessionId, selectedAgents, refreshSession])
 
   return {
     sessionData,

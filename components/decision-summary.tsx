@@ -42,69 +42,33 @@ export function DecisionSummary({ sessionId }: DecisionSummaryProps) {
         setIsLoading(true)
         console.log(`🔍 Fetching decision data for session ${sessionId}`)
 
-        // First, fetch all available sessions to see what exists
-        const sessionResponse = await fetch(`/api/boardroom/sessions`)
+        // Fetch session data using the dedicated single-session endpoint
+        const sessionResponse = await fetch(`/api/boardroom/sessions/${sessionId}`)
         
         if (!sessionResponse.ok) {
-          throw new Error('Failed to fetch sessions')
+          if (sessionResponse.status === 404) {
+            throw new Error('Session not found or access denied')
+          }
+          throw new Error('Failed to fetch session data')
         }
 
         const sessionResult = await sessionResponse.json()
         
-        if (sessionResult.success) {
-          console.log(`📊 Available sessions:`, sessionResult.data?.map((s: SessionData) => ({ id: s.id, name: s.name, status: s.status })))
+        if (sessionResult.success && sessionResult.data) {
+          const session = sessionResult.data
+          console.log(`✅ Found session:`, { id: session.id, name: session.name, status: session.status })
           
-          // Find the specific session from the list
-          const session = sessionResult.data?.find((s: SessionData) => s.id === sessionId)
-          
-          if (session) {
-            console.log(`✅ Found target session:`, { id: session.id, name: session.name, status: session.status })
-            
-            // Now fetch messages for this confirmed session
-            const messagesResponse = await fetch(`/api/boardroom/sessions/${sessionId}/messages`)
-            
-            if (messagesResponse.ok) {
-              const messagesResult = await messagesResponse.json()
-              
-              if (messagesResult.success) {
-                setSessionData({
-                  id: session.id,
-                  name: session.name,
-                  status: session.status,
-                  createdAt: session.createdAt,
-                  scenario: session.scenario,
-                  messages: messagesResult.data
-                })
-                console.log(`✅ Session data loaded successfully with ${messagesResult.data?.length || 0} messages`)
-              } else {
-                console.error(`❌ Failed to fetch messages:`, messagesResult.error)
-                throw new Error(`Failed to fetch messages: ${messagesResult.error}`)
-              }
-            } else {
-              console.error(`❌ Messages request failed with status ${messagesResponse.status}`)
-              const errorData = await messagesResponse.json().catch(() => ({}))
-              throw new Error(`Failed to fetch messages: ${errorData.error || 'Unknown error'}`)
-            }
-          } else {
-            console.error(`❌ Session ${sessionId} not found in available sessions`)
-            console.log(`💡 Available session IDs:`, sessionResult.data?.map((s: SessionData) => s.id))
-            
-            // Fallback: Use the most recent session if available
-            if (sessionResult.data && sessionResult.data.length > 0) {
-              const latestSession = sessionResult.data[0] // Sessions are ordered by createdAt DESC
-              console.log(`🔄 Falling back to latest session: ${latestSession.id}`)
-              
-              // Redirect to the correct session
-              if (typeof window !== 'undefined') {
-                window.location.href = `/decisions/${latestSession.id}`
-                return
-              }
-            }
-            
-            throw new Error(`Session not found: ${sessionId}`)
-          }
+          setSessionData({
+            id: session.id,
+            name: session.name,
+            status: session.status,
+            createdAt: session.createdAt,
+            scenario: session.scenario,
+            messages: session.messages || []
+          })
+          console.log(`✅ Session data loaded successfully with ${session.messages?.length || 0} messages`)
         } else {
-          throw new Error('Failed to fetch session data')
+          throw new Error('Invalid response format from server')
         }
       } catch (err) {
         console.error('Error fetching session data:', err)
@@ -213,11 +177,58 @@ ${agentTypes.map(agent => `
     }
   }
 
-  const handleExportPDF = () => {
-    toast({
-      title: "PDF Export Initiated",
-      description: "Your executive decision summary is being prepared for download.",
-    })
+  const handleExportPDF = async () => {
+    if (!sessionData) return
+    
+    try {
+      toast({
+        title: "Generating PDF",
+        description: "Your executive decision summary is being prepared...",
+      })
+
+      const response = await fetch('/api/boardroom/export', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sessionId: sessionData.id,
+          format: 'pdf',
+          options: {
+            includeTranscript: true,
+            includeReasoning: true,
+            includeCitations: true,
+          },
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to generate PDF')
+      }
+
+      // Download the PDF
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `session-report-${sessionData.id.substring(0, 8)}-${new Date().toISOString().split('T')[0]}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+
+      toast({
+        title: "PDF Downloaded",
+        description: "Your executive decision summary has been downloaded successfully.",
+      })
+    } catch (err) {
+      console.error('Error exporting PDF:', err)
+      toast({
+        title: "Export Failed",
+        description: "Failed to generate PDF. Please try again.",
+        variant: "destructive",
+      })
+    }
   }
 
   const handleShare = () => {

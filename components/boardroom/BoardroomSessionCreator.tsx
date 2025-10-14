@@ -128,6 +128,13 @@ export function BoardroomSessionCreator() {
           setScenario(scenarioData)
           setSessionName(`${scenarioData.name} - AI Discussion`)
           setSessionDescription(`AI boardroom discussion for: ${scenarioData.description}`)
+          
+          // Auto-select recommended agents if available
+          if (scenarioData.recommendedAgents && scenarioData.recommendedAgents.length > 0) {
+            setSelectedAgents(scenarioData.recommendedAgents)
+            console.log(`✅ Auto-selected ${scenarioData.recommendedAgents.length} recommended agents`);
+          }
+          
           console.log(`✅ Loaded scenario: ${scenarioData.name}`);
         } else {
           const errorData = await response.json();
@@ -370,6 +377,7 @@ export function BoardroomSessionCreator() {
           onClick={handleCreateSession} 
           disabled={isLoading || !sessionName.trim() || selectedAgents.length === 0}
           className="flex-1"
+          size="lg"
         >
           {isLoading ? (
             <>

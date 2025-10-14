@@ -96,6 +96,7 @@ model BoardroomSession {
   startedAt   DateTime?
   endedAt     DateTime?
   status      String   // scheduled, active, completed
+  agents      String?  // JSON string array of selected agents (e.g., ["ceo", "cfo", "cto"])
   
   // Relations
   messages    Message[]

@@ -16,7 +16,6 @@ import {
   Zap, 
   CheckCircle,
   ArrowRight,
-  PlayCircle,
   BarChart3,
   Lightbulb,
   Target,
@@ -66,12 +65,6 @@ export default function HomePage() {
             </div>
             <div className="flex items-center space-x-4">
               <ThemeToggle />
-              <Link href="/login?demo=true">
-                <Button variant="ghost" size="sm" className="hover:bg-blue-50 dark:hover:bg-slate-800 transition-colors duration-200">
-                  <PlayCircle className="h-4 w-4 mr-2" />
-                  Demo App
-                </Button>
-              </Link>
               <Link href="/login">
                 <Button size="sm" className="bg-blue-600 hover:bg-blue-700 transform hover:scale-105 transition-all duration-200">
                   Login / Signup
@@ -296,38 +289,13 @@ export default function HomePage() {
         
         <div className="max-w-4xl mx-auto text-center relative z-10">
           <h2 className="text-3xl font-bold text-white mb-4">
-            Choose Your Experience
+            Get Started Today
           </h2>
           <p className="text-xl text-blue-100 dark:text-blue-200 mb-8">
-            Explore with sample data or dive into real business intelligence.
+            Create your account to access all AI capabilities with pre-built scenario templates.
           </p>
           
-          <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-            {/* Demo App Card */}
-            <div className="bg-white/10 dark:bg-slate-800/20 backdrop-blur-sm rounded-2xl p-8 border border-white/20 dark:border-slate-700/30 hover:bg-white/20 dark:hover:bg-slate-700/30 transition-all duration-300 group cursor-pointer">
-              <div className="flex items-center justify-center mb-4">
-                <div className="h-16 w-16 bg-white/20 dark:bg-slate-700/50 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                  <PlayCircle className="h-8 w-8 text-white" />
-                </div>
-              </div>
-              <h3 className="text-xl font-bold text-white mb-2">Demo App</h3>
-              <p className="text-blue-100 dark:text-blue-200 mb-6">
-                Experience all features with sample data, mock scenarios, and simulated responses. Perfect for testing and evaluation.
-              </p>
-              <ul className="text-sm text-blue-100 dark:text-blue-200 mb-6 space-y-2">
-                <li className="flex items-center"><CheckCircle className="h-4 w-4 mr-2 text-green-300 dark:text-green-400" />Sample business scenarios</li>
-                <li className="flex items-center"><CheckCircle className="h-4 w-4 mr-2 text-green-300 dark:text-green-400" />Mock AI responses</li>
-                <li className="flex items-center"><CheckCircle className="h-4 w-4 mr-2 text-green-300 dark:text-green-400" />Demo data sets</li>
-                <li className="flex items-center"><CheckCircle className="h-4 w-4 mr-2 text-green-300 dark:text-green-400" />Full feature exploration</li>
-              </ul>
-              <Link href="/login?demo=true">
-                <Button className="w-full bg-white text-blue-600 hover:bg-blue-50 dark:bg-slate-800 dark:text-blue-400 dark:hover:bg-slate-700 group-hover:scale-105 transition-all duration-300">
-                  <PlayCircle className="h-4 w-4 mr-2" />
-                  Try Demo App
-                </Button>
-              </Link>
-            </div>
-
+          <div className="grid md:grid-cols-1 gap-6 max-w-xl mx-auto">
             {/* Full Platform Access Card */}
             <div className="bg-white/10 dark:bg-slate-800/20 backdrop-blur-sm rounded-2xl p-8 border border-white/20 dark:border-slate-700/30 hover:bg-white/20 dark:hover:bg-slate-700/30 transition-all duration-300 group cursor-pointer">
               <div className="flex items-center justify-center mb-4">
@@ -337,13 +305,14 @@ export default function HomePage() {
               </div>
               <h3 className="text-xl font-bold text-white mb-2">Full Platform Access</h3>
               <p className="text-blue-100 dark:text-blue-200 mb-6">
-                Create your account for complete access to all AI capabilities, real business analysis, and production-ready intelligence.
+                Create your account for complete access to all AI capabilities, scenario templates, real business analysis, and production-ready intelligence.
               </p>
               <ul className="text-sm text-blue-100 dark:text-blue-200 mb-6 space-y-2">
-                <li className="flex items-center"><CheckCircle className="h-4 w-4 mr-2 text-green-300 dark:text-green-400" />Real data analysis</li>
-                <li className="flex items-center"><CheckCircle className="h-4 w-4 mr-2 text-green-300 dark:text-green-400" />Production AI models</li>
-                <li className="flex items-center"><CheckCircle className="h-4 w-4 mr-2 text-green-300 dark:text-green-400" />Custom scenarios</li>
-                <li className="flex items-center"><CheckCircle className="h-4 w-4 mr-2 text-green-300 dark:text-green-400" />Enterprise features</li>
+                <li className="flex items-center"><CheckCircle className="h-4 w-4 mr-2 text-green-300 dark:text-green-400" />4 AI Agents (CEO, CFO, CTO, HR)</li>
+                <li className="flex items-center"><CheckCircle className="h-4 w-4 mr-2 text-green-300 dark:text-green-400" />6 Scenario Templates</li>
+                <li className="flex items-center"><CheckCircle className="h-4 w-4 mr-2 text-green-300 dark:text-green-400" />Custom Scenarios</li>
+                <li className="flex items-center"><CheckCircle className="h-4 w-4 mr-2 text-green-300 dark:text-green-400" />Document Upload with RAG</li>
+                <li className="flex items-center"><CheckCircle className="h-4 w-4 mr-2 text-green-300 dark:text-green-400" />Real-time Collaboration</li>
               </ul>
               <Link href="/login">
                 <Button className="w-full bg-white text-blue-600 hover:bg-blue-50 dark:bg-slate-800 dark:text-blue-400 dark:hover:bg-slate-700 group-hover:scale-105 transition-all duration-300">
@@ -355,7 +324,7 @@ export default function HomePage() {
           </div>
           
           <p className="text-blue-200 dark:text-blue-300 text-sm mt-6">
-            Both options provide access to all platform features • Demo uses sample data • Full access uses real data
+            Start with pre-built scenario templates or create custom scenarios for your business
           </p>
         </div>
       </section>

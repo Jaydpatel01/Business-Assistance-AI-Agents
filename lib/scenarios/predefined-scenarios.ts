@@ -34,6 +34,91 @@ export const PREDEFINED_SCENARIOS: PredefinedScenario[] = [
     estimatedDuration: '45-60 min',
     defaultQuery: 'What are the key financial metrics we should evaluate before proceeding with this $2M investment opportunity?',
     recommendedAgents: ['ceo', 'cfo']
+  },
+  {
+    id: 'market-expansion-strategy',
+    name: 'Market Expansion Strategy',
+    description: 'Develop a comprehensive plan for entering new European markets with focus on regulatory compliance, competitive analysis, and go-to-market strategy.',
+    tags: ['strategy', 'expansion', 'international', 'growth'],
+    parameters: {
+      timeframe: '12-months',
+      targetMarkets: ['Germany', 'France', 'UK'],
+      departments: ['Strategy', 'Marketing', 'Legal']
+    },
+    status: 'draft',
+    category: 'strategic',
+    difficulty: 'advanced',
+    estimatedDuration: '60-75 min',
+    defaultQuery: 'What are the critical success factors for expanding into European markets?',
+    recommendedAgents: ['ceo', 'cfo', 'cto']
+  },
+  {
+    id: 'cost-optimization-initiative',
+    name: 'Cost Optimization Initiative',
+    description: 'Analyze current burn rate and develop strategies to reduce operational costs by 30% while maintaining growth trajectory and team morale.',
+    tags: ['finance', 'operations', 'efficiency', 'cost-reduction'],
+    parameters: {
+      timeframe: '3-months',
+      targetReduction: '30%',
+      departments: ['Finance', 'Operations', 'HR']
+    },
+    status: 'draft',
+    category: 'operational',
+    difficulty: 'intermediate',
+    estimatedDuration: '30-45 min',
+    defaultQuery: 'How can we reduce our burn rate by 30% without compromising our growth plans?',
+    recommendedAgents: ['cfo', 'ceo']
+  },
+  {
+    id: 'workforce-planning-restructuring',
+    name: 'Workforce Planning & Restructuring',
+    description: 'Strategic workforce planning to align talent with business objectives, including hiring priorities, skill gap analysis, and organizational restructuring.',
+    tags: ['hr', 'talent', 'organization', 'planning'],
+    parameters: {
+      timeframe: '6-months',
+      headcount: '50-75',
+      departments: ['HR', 'All Departments']
+    },
+    status: 'draft',
+    category: 'hr',
+    difficulty: 'intermediate',
+    estimatedDuration: '45-60 min',
+    defaultQuery: 'What should our hiring priorities be to support our growth objectives?',
+    recommendedAgents: ['hr', 'ceo']
+  },
+  {
+    id: 'digital-transformation-roadmap',
+    name: 'Digital Transformation Roadmap',
+    description: 'Create a comprehensive technology modernization plan including cloud migration, AI integration, and legacy system replacement.',
+    tags: ['technology', 'digital', 'transformation', 'modernization'],
+    parameters: {
+      timeframe: '18-months',
+      budget: '$5M',
+      departments: ['Technology', 'Operations', 'Finance']
+    },
+    status: 'draft',
+    category: 'strategic',
+    difficulty: 'advanced',
+    estimatedDuration: '60-90 min',
+    defaultQuery: 'What should be our top priorities for digital transformation over the next 18 months?',
+    recommendedAgents: ['cto', 'ceo', 'cfo']
+  },
+  {
+    id: 'customer-retention-strategy',
+    name: 'Customer Retention Strategy',
+    description: 'Develop strategies to reduce churn from 12% to 5% through improved customer experience, product enhancements, and support optimization.',
+    tags: ['customer', 'retention', 'churn', 'experience'],
+    parameters: {
+      timeframe: '6-months',
+      targetChurn: '5%',
+      departments: ['Customer Success', 'Product', 'Marketing']
+    },
+    status: 'draft',
+    category: 'operational',
+    difficulty: 'intermediate',
+    estimatedDuration: '45-60 min',
+    defaultQuery: 'What are the most effective strategies to reduce our customer churn rate?',
+    recommendedAgents: ['ceo', 'cfo', 'cto']
   }
 ];
 
@@ -76,6 +161,20 @@ export function getPredefinedScenarios(
  */
 export function getPredefinedScenario(id: string): PredefinedScenario | undefined {
   return PREDEFINED_SCENARIOS.find(s => s.id === id);
+}
+
+/**
+ * Check if a scenario ID belongs to a predefined scenario
+ */
+export function isPredefinedScenario(id: string): boolean {
+  return PREDEFINED_SCENARIOS.some(s => s.id === id);
+}
+
+/**
+ * Get all predefined scenario IDs
+ */
+export function getPredefinedScenarioIds(): string[] {
+  return PREDEFINED_SCENARIOS.map(s => s.id);
 }
 
 /**

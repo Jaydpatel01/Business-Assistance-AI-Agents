@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth/config';
 import { PREDEFINED_SCENARIOS, formatScenarioForAPI } from '@/lib/scenarios/predefined-scenarios';
+import { prisma } from '@/lib/db/prisma';
 
 const UpdateScenarioSchema = z.object({
   name: z.string().min(1, 'Name is required').optional(),
@@ -106,13 +107,68 @@ export async function GET(
       });
     }
 
-    // If not found in predefined scenarios, check mock scenarios for backward compatibility
+    // Check database for user-created scenarios
+    console.log(`🔍 Checking database for scenario ID: ${id}`);
+    const dbScenario = await prisma.scenario.findUnique({
+      where: { id },
+      include: {
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          }
+        },
+        sessions: {
+          include: {
+            participants: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                  }
+                }
+              }
+            },
+            _count: {
+              select: {
+                participants: true,
+                messages: true,
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (dbScenario) {
+      console.log(`✅ Found database scenario: ${dbScenario.name}`);
+      return NextResponse.json({
+        success: true,
+        data: {
+          id: dbScenario.id,
+          name: dbScenario.name,
+          description: dbScenario.description,
+          tags: dbScenario.tags,
+          parameters: dbScenario.parameters ? JSON.parse(dbScenario.parameters) : {},
+          status: dbScenario.status,
+          createdAt: dbScenario.createdAt.toISOString(),
+          updatedAt: dbScenario.updatedAt.toISOString(),
+          createdBy: dbScenario.createdBy,
+          sessions: dbScenario.sessions,
+        }
+      });
+    }
+
+    // If not found in database, check mock scenarios for backward compatibility
     const mockScenarios = getMockScenarios(session.user.id);
     console.log(`🧪 Available mock scenario IDs:`, mockScenarios.map(s => s.id));
     const scenario = mockScenarios.find(s => s.id === id);
 
     if (!scenario) {
-      console.log(`❌ Scenario "${id}" not found in predefined or mock scenarios`);
+      console.log(`❌ Scenario "${id}" not found in predefined, database, or mock scenarios`);
       return NextResponse.json(
         { 
           success: false, 

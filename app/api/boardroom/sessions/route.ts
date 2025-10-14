@@ -142,6 +142,7 @@ export async function POST(request: NextRequest) {
         name: sessionName,
         scenarioId: scenarioId,
         status: 'active',
+        agents: JSON.stringify(selectedAgents), // Store selected agents
         participants: {
           create: [
             {

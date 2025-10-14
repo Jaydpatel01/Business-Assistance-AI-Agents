@@ -29,8 +29,6 @@ export default withAuth(
           '/auth/signup',              // Signup page
           '/api/auth',                 // NextAuth.js authentication endpoints
           '/api/health',               // System health checks
-          '/demo',                     // Demo pages (Phase 2-6 demonstrations)
-          '/api/demo'                  // Demo API endpoints (if any)
         ]
         
         // Check if the current path is a public route

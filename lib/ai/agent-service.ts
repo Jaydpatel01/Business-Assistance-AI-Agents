@@ -739,7 +739,23 @@ const createEnhancedAgentPrompt = (
 RESPONSE FORMAT:
 1. ${hasDocuments ? 'Document-Based Analysis: [Your analysis using cited sources]' : 'Market-Based Analysis: [Your analysis using current market data]'}
 2. Professional Insights: [Your expert perspective integrating ${hasDocuments ? 'document' : ''} ${hasMarketData ? 'and market' : ''} findings]
-3. Recommendations: [Actionable recommendations with ${hasDocuments ? 'source' : 'market data'} backing]`;
+3. Recommendations: [Actionable recommendations with ${hasDocuments ? 'source' : 'market data'} backing]
+
+REQUIRED METADATA (Include at the end of your response in this exact format):
+---METADATA---
+CONFIDENCE: [High/Medium/Low]
+KEY_FACTORS:
+- [Factor 1]
+- [Factor 2]
+- [Factor 3]
+RISKS:
+- [Risk 1]
+- [Risk 2]
+ASSUMPTIONS:
+- [Assumption 1]
+- [Assumption 2]
+DATA_SOURCES: ${hasDocuments ? 'Company Documents' : ''}${hasDocuments && hasMarketData ? ', ' : ''}${hasMarketData ? 'Market Intelligence, Industry Trends' : ''}
+---END_METADATA---`;
   }
   
   return enhancedPrompt;
@@ -1011,7 +1027,9 @@ Provide your synthesis in this exact format:
 **CONFIDENCE LEVEL:** [High/Medium/Low] - [Brief justification based on document support and executive consensus]`;
 
     const genAI = getGeminiClient();
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    // Use the configured model from environment variables
+    const modelName = process.env.AI_MODEL || 'gemini-1.5-flash-latest';
+    const model = genAI.getGenerativeModel({ model: modelName });
     
     const result = await model.generateContent(synthesisPrompt);
     const response = await result.response;
@@ -1063,7 +1081,7 @@ export async function* streamAgentResponse(
       const ragData = await retrieveRelevantDocuments(context, agentType, userId, organizationId);
       ragContext = ragData.context;
       relevantDocuments = ragData.documents;
-    } catch (ragError) {
+    } catch {
       // Continue without RAG context
     }
   }

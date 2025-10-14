@@ -10,6 +10,20 @@ interface StreamingMessage {
   timestamp: Date
   isStreaming: boolean
   isComplete: boolean
+  // 📄 ENHANCED: Add document metadata
+  documentMetadata?: {
+    citedDocuments: number[]
+    documentsUsed: number
+    hasDocumentContext: boolean
+  }
+  // 🎯 ENHANCED: Add explainability metadata
+  confidence?: number
+  reasoning?: {
+    keyFactors?: string[]
+    risks?: string[]
+    assumptions?: string[]
+    dataSources?: string[]
+  }
 }
 
 interface StreamingMessageListProps {
@@ -74,6 +88,9 @@ export function StreamingMessageList({
               timestamp={message.timestamp}
               isStreaming={message.isStreaming}
               isComplete={message.isComplete}
+              documentMetadata={message.documentMetadata} // 📄 ENHANCED: Pass document metadata
+              confidence={message.confidence} // 🎯 ENHANCED: Pass confidence score
+              reasoning={message.reasoning} // 🎯 ENHANCED: Pass reasoning metadata
             />
           ))
         )}

@@ -94,7 +94,6 @@ export const authOptions: NextAuthOptions = {
             role: user.role || "user",
             company: user.company || undefined,
             image: user.image || undefined,
-            isDemo: false
           }
         } catch (error) {
           console.error("Authentication error:", error)
@@ -118,12 +117,10 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.role = user.role || "user";
         token.company = user.company || undefined;
-        token.isDemo = user.role === "demo";
       }
       
-      // For OAuth users (Google/GitHub), mark as real users and fetch their data from DB
+      // For OAuth users (Google/GitHub), fetch their data from DB
       if (account?.provider === "google" || account?.provider === "github") {
-        token.isDemo = false;
         token.role = "user";
         
         // Fetch user data from database for OAuth users
@@ -169,10 +166,6 @@ export const authOptions: NextAuthOptions = {
         if (token.name) {
           session.user.name = token.name as string;
         }
-        
-        // Extend session with isDemo property
-        const extendedUser = session.user as typeof session.user & { isDemo: boolean };
-        extendedUser.isDemo = token.isDemo as boolean;
       }
       return session;
     },

@@ -158,6 +158,23 @@ export async function POST(request: Request) {
     const body = await request.json();
     const validatedData = CreateScenarioSchema.parse(body);
 
+    // Validate that custom scenario name doesn't conflict with predefined scenarios
+    const predefinedScenarios = getPredefinedScenarios();
+    const conflictingScenario = predefinedScenarios.find(
+      ps => ps.name.toLowerCase() === validatedData.name.toLowerCase()
+    );
+    
+    if (conflictingScenario) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: `A predefined scenario with this name already exists. Please choose a different name.`,
+          suggestion: `${validatedData.name} (Custom)`
+        },
+        { status: 400 }
+      );
+    }
+
     // Check if this is a demo user
     const isDemoUser = session.user.role === 'demo';
 

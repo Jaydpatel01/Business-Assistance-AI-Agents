@@ -8,6 +8,20 @@ interface StreamingMessage {
   timestamp: Date
   isStreaming: boolean
   isComplete: boolean
+  // 📄 ENHANCED: Add document metadata
+  documentMetadata?: {
+    citedDocuments: number[]
+    documentsUsed: number
+    hasDocumentContext: boolean
+  }
+  // 🎯 ENHANCED: Add explainability metadata
+  confidence?: number
+  reasoning?: {
+    keyFactors?: string[]
+    risks?: string[]
+    assumptions?: string[]
+    dataSources?: string[]
+  }
 }
 
 interface StreamingBoardroomState {
@@ -18,6 +32,18 @@ interface StreamingBoardroomState {
   maxRounds: number
   sessionId: string | null
   error: string | null
+  // 📄 ENHANCED: Add document context to state
+  documentContext?: {
+    documentsUsed: number
+    citations: Array<{
+      id: string
+      name: string
+      relevanceScore: number
+      excerpt: string
+      citationIndex: number
+      fullText?: string
+    }>
+  } | null
 }
 
 interface UseStreamingBoardroomOptions {
@@ -67,7 +93,8 @@ export function useStreamingBoardroom({
     currentRound: 0,
     maxRounds: 3,
     sessionId: null,
-    error: null
+    error: null,
+    documentContext: null // 📄 ENHANCED: Initialize document context
   })
 
   const stopStreaming = useCallback(() => {
@@ -91,7 +118,8 @@ export function useStreamingBoardroom({
       currentRound: 0,
       maxRounds: 3,
       sessionId: null,
-      error: null
+      error: null,
+      documentContext: null // 📄 ENHANCED: Clear document context
     })
   }, [stopStreaming])
 
@@ -153,6 +181,8 @@ export function useStreamingBoardroom({
                     ...prev,
                     sessionId: data.sessionId,
                     maxRounds: data.maxRounds || 3,
+                    // 📄 ENHANCED: Store document context from session start
+                    documentContext: data.documentContext || null,
                     messages: [...prev.messages, {
                       id: `user-${Date.now()}`,
                       agentType: 'user',
@@ -218,7 +248,12 @@ export function useStreamingBoardroom({
                       ...streamingMessageRef,
                       content: data.response,
                       isStreaming: false,
-                      isComplete: true
+                      isComplete: true,
+                      // 📄 ENHANCED: Include document metadata
+                      documentMetadata: data.documentMetadata,
+                      // 🎯 ENHANCED: Include explainability metadata
+                      confidence: data.confidence,
+                      reasoning: data.reasoning
                     }
                     
                     setState(prev => ({

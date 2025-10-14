@@ -1,11 +1,12 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import React, { useEffect, useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Brain, DollarSign, Code, Users, User, Eye } from "lucide-react"
+import { Progress } from "@/components/ui/progress"
+import { Brain, DollarSign, Code, Users, User, Eye, FileText, CheckCircle, AlertTriangle, Info } from "lucide-react"
 
 interface StreamingMessageProps {
   id: string
@@ -14,6 +15,20 @@ interface StreamingMessageProps {
   timestamp: Date
   isStreaming: boolean
   isComplete: boolean
+  // 📄 ENHANCED: Add document metadata
+  documentMetadata?: {
+    citedDocuments: number[]
+    documentsUsed: number
+    hasDocumentContext: boolean
+  }
+  // 🎯 ENHANCED: Add confidence and reasoning metadata
+  confidence?: number // 0-1 scale
+  reasoning?: {
+    keyFactors?: string[]
+    risks?: string[]
+    assumptions?: string[]
+    dataSources?: string[]
+  }
 }
 
 const agentIcons = {
@@ -48,7 +63,10 @@ export function StreamingMessage({
   content, 
   timestamp, 
   isStreaming,
-  isComplete 
+  isComplete,
+  documentMetadata, // 📄 ENHANCED: Receive document metadata
+  confidence = 0.85, // 🎯 ENHANCED: Default confidence
+  reasoning // 🎯 ENHANCED: Reasoning metadata
 }: StreamingMessageProps) {
   const [showExplanation, setShowExplanation] = useState(false)
   const [displayedContent, setDisplayedContent] = useState("")
@@ -58,6 +76,12 @@ export function StreamingMessage({
   const Icon = agentIcons[agentType as keyof typeof agentIcons] || User
   const colorClass = agentColors[agentType as keyof typeof agentColors] || agentColors.user
   const title = agentTitles[agentType as keyof typeof agentTitles] || "Unknown"
+
+  // 🎯 ENHANCED: Confidence level helpers
+  const confidencePercentage = Math.round(confidence * 100)
+  const confidenceLevel = confidence >= 0.8 ? 'high' : confidence >= 0.6 ? 'medium' : 'low'
+  const confidenceColor = confidence >= 0.8 ? 'text-green-600' : confidence >= 0.6 ? 'text-yellow-600' : 'text-red-600'
+  const confidenceIcon = confidence >= 0.8 ? CheckCircle : confidence >= 0.6 ? AlertTriangle : Info
 
   // Simulate streaming effect for agent responses
   useEffect(() => {
@@ -143,27 +167,136 @@ export function StreamingMessage({
 
             {!isUser && isComplete && (
               <div className="space-y-2">
+                {/* 🎯 ENHANCED: Prominent confidence score */}
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className={`text-xs ${confidenceColor} border-current`}>
+                    {React.createElement(confidenceIcon, { className: "h-3 w-3 mr-1" })}
+                    {confidencePercentage}% Confidence
+                  </Badge>
+                  {documentMetadata && documentMetadata.citedDocuments.length > 0 && (
+                    <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300">
+                      <FileText className="h-3 w-3 mr-1" />
+                      Used {documentMetadata.citedDocuments.length} document{documentMetadata.citedDocuments.length !== 1 ? 's' : ''}
+                    </Badge>
+                  )}
+                </div>
+                
+                {/* 🎯 ENHANCED: Prominent "Why?" button */}
                 <Button
-                  variant="ghost"
+                  variant="default"
                   size="sm"
                   onClick={() => setShowExplanation(!showExplanation)}
-                  className="h-6 px-2 text-xs"
+                  className="h-8 px-3 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700"
                 >
-                  <Eye className="h-3 w-3 mr-1" />
-                  {showExplanation ? "Hide" : "Show"} Reasoning
+                  <Eye className="h-3.5 w-3.5 mr-1.5" />
+                  {showExplanation ? "Hide" : "Why?"} - Show Reasoning
                 </Button>
 
                 {showExplanation && (
-                  <div className="bg-muted/50 p-3 rounded-md border-l-2 border-indigo-500">
-                    <p className="text-xs text-muted-foreground font-medium mb-1">Executive Reasoning:</p>
-                    <p className="text-xs text-muted-foreground italic">
-                      As the {title}, my response considers {
-                        agentType === 'ceo' ? 'strategic vision and overall business impact' : 
-                        agentType === 'cfo' ? 'financial implications and risk management' : 
-                        agentType === 'cto' ? 'technical feasibility and innovation opportunities' : 
-                        'people impact and organizational culture'
-                      }.
-                    </p>
+                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950/30 dark:to-purple-950/30 p-4 rounded-lg border border-indigo-200 dark:border-indigo-800 space-y-3">
+                    {/* Confidence Breakdown */}
+                    <div>
+                      <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-100 mb-2 flex items-center gap-1">
+                        {React.createElement(confidenceIcon, { className: "h-4 w-4" })}
+                        Confidence Level: {confidenceLevel.toUpperCase()} ({confidencePercentage}%)
+                      </p>
+                      <Progress value={confidencePercentage} className="h-2" />
+                    </div>
+
+                    {/* Executive Reasoning */}
+                    <div>
+                      <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-100 mb-1">
+                        Executive Perspective:
+                      </p>
+                      <p className="text-xs text-muted-foreground italic">
+                        As the {title}, my response considers {
+                          agentType === 'ceo' ? 'strategic vision, market positioning, and overall business impact' : 
+                          agentType === 'cfo' ? 'financial implications, ROI analysis, and comprehensive risk management' : 
+                          agentType === 'cto' ? 'technical feasibility, scalability, security, and innovation opportunities' : 
+                          'people impact, talent development, organizational culture, and employee wellbeing'
+                        }.
+                      </p>
+                    </div>
+
+                    {/* 🎯 ENHANCED: Key Factors */}
+                    {reasoning?.keyFactors && reasoning.keyFactors.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-100 mb-1">
+                          🎯 Key Factors Considered:
+                        </p>
+                        <ul className="text-xs text-muted-foreground space-y-1">
+                          {reasoning.keyFactors.map((factor, idx) => (
+                            <li key={idx} className="flex items-start gap-1">
+                              <span className="text-indigo-600 dark:text-indigo-400 mt-0.5">•</span>
+                              <span>{factor}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* 🎯 ENHANCED: Risks Identified */}
+                    {reasoning?.risks && reasoning.risks.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-red-900 dark:text-red-100 mb-1">
+                          ⚠️ Risks Identified:
+                        </p>
+                        <ul className="text-xs text-muted-foreground space-y-1">
+                          {reasoning.risks.map((risk, idx) => (
+                            <li key={idx} className="flex items-start gap-1">
+                              <span className="text-red-600 dark:text-red-400 mt-0.5">•</span>
+                              <span>{risk}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* 🎯 ENHANCED: Assumptions Made */}
+                    {reasoning?.assumptions && reasoning.assumptions.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-yellow-900 dark:text-yellow-100 mb-1">
+                          💭 Assumptions Made:
+                        </p>
+                        <ul className="text-xs text-muted-foreground space-y-1">
+                          {reasoning.assumptions.map((assumption, idx) => (
+                            <li key={idx} className="flex items-start gap-1">
+                              <span className="text-yellow-600 dark:text-yellow-400 mt-0.5">•</span>
+                              <span>{assumption}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* 📄 Document Sources */}
+                    {documentMetadata && documentMetadata.citedDocuments.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-blue-900 dark:text-blue-100 mb-1">
+                          📚 Document Sources:
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Referenced {documentMetadata.citedDocuments.map(num => `[Document ${num}]`).join(', ')} 
+                          from uploaded materials
+                        </p>
+                      </div>
+                    )}
+
+                    {/* 🎯 ENHANCED: Data Sources */}
+                    {reasoning?.dataSources && reasoning.dataSources.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-green-900 dark:text-green-100 mb-1">
+                          📊 Data Sources Used:
+                        </p>
+                        <div className="flex flex-wrap gap-1">
+                          {reasoning.dataSources.map((source, idx) => (
+                            <Badge key={idx} variant="secondary" className="text-xs">
+                              {source}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

@@ -11,6 +11,70 @@ import {
 } from '@/lib/security/input-sanitizer';
 import { prisma } from '@/lib/db/connection';
 
+// 🎯 ENHANCED: Parse reasoning metadata from agent response
+function parseReasoningMetadata(response: string) {
+  const metadataMatch = response.match(/---METADATA---([\s\S]*?)---END_METADATA---/);
+  if (!metadataMatch) {
+    return {
+      cleanResponse: response,
+      confidence: 0.85, // default
+      reasoning: undefined
+    };
+  }
+
+  const metadataText = metadataMatch[1];
+  
+  // Extract confidence
+  const confidenceMatch = metadataText.match(/CONFIDENCE:\s*(High|Medium|Low)/i);
+  const confidenceLevel = confidenceMatch?.[1]?.toLowerCase() || 'medium';
+  const confidenceValue = confidenceLevel === 'high' ? 0.9 : confidenceLevel === 'medium' ? 0.75 : 0.6;
+  
+  // Extract key factors
+  const keyFactorsMatch = metadataText.match(/KEY_FACTORS:([\s\S]*?)(?:RISKS:|ASSUMPTIONS:|DATA_SOURCES:|---END_METADATA---)/);
+  const keyFactors = keyFactorsMatch?.[1]
+    .split('\n')
+    .filter(line => line.trim().startsWith('-'))
+    .map(line => line.replace(/^-\s*/, '').trim())
+    .filter(Boolean) || [];
+  
+  // Extract risks
+  const risksMatch = metadataText.match(/RISKS:([\s\S]*?)(?:ASSUMPTIONS:|DATA_SOURCES:|---END_METADATA---)/);
+  const risks = risksMatch?.[1]
+    .split('\n')
+    .filter(line => line.trim().startsWith('-'))
+    .map(line => line.replace(/^-\s*/, '').trim())
+    .filter(Boolean) || [];
+  
+  // Extract assumptions
+  const assumptionsMatch = metadataText.match(/ASSUMPTIONS:([\s\S]*?)(?:DATA_SOURCES:|---END_METADATA---)/);
+  const assumptions = assumptionsMatch?.[1]
+    .split('\n')
+    .filter(line => line.trim().startsWith('-'))
+    .map(line => line.replace(/^-\s*/, '').trim())
+    .filter(Boolean) || [];
+  
+  // Extract data sources
+  const dataSourcesMatch = metadataText.match(/DATA_SOURCES:\s*([^\n]+)/);
+  const dataSources = dataSourcesMatch?.[1]
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean) || [];
+
+  // Remove metadata from response
+  const cleanResponse = response.replace(/---METADATA---[\s\S]*?---END_METADATA---/, '').trim();
+  
+  return {
+    cleanResponse,
+    confidence: confidenceValue,
+    reasoning: {
+      keyFactors: keyFactors.length > 0 ? keyFactors : undefined,
+      risks: risks.length > 0 ? risks : undefined,
+      assumptions: assumptions.length > 0 ? assumptions : undefined,
+      dataSources: dataSources.length > 0 ? dataSources : undefined
+    }
+  };
+}
+
 // Request validation schema
 const StreamBoardroomRequestSchema = z.object({
   scenario: z.object({
@@ -142,13 +206,23 @@ export async function POST(request: Request) {
         );
         
         if (documentContext.length > 0) {
+          // 🎯 ENHANCED: Create more detailed and structured document summary for agents
           const documentSummary = documentContext
-            .map((doc, index) => 
-              `Document ${index + 1} (${doc.metadata.documentName}): ${doc.text.substring(0, 200)}...`
-            )
+            .map((doc, index) => {
+              const relevancePercent = (doc.score * 100).toFixed(0);
+              return `📄 [Document ${index + 1}] "${doc.metadata.documentName}" (${relevancePercent}% relevant)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${doc.text.substring(0, 400)}${doc.text.length > 400 ? '...' : ''}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+            })
             .join('\n\n');
           
-          context += `\n\n📄 RELEVANT COMPANY DOCUMENTS:\n${documentSummary}`;
+          context += `\n\n� RELEVANT COMPANY DOCUMENTS (${documentContext.length} found):
+
+${documentSummary}
+
+⚠️ IMPORTANT: Please reference these documents in your analysis when relevant. 
+Use citations like "[Document 1]" or "[Document 2]" when referencing specific information.`;
         }
       } catch (error) {
         console.warn('Document retrieval failed, proceeding without document context:', error);
@@ -289,7 +363,7 @@ export async function POST(request: Request) {
             }
           });
 
-          // Send initial response with session info
+          // Send initial response with session info INCLUDING document context
           const initialData = {
             type: 'session_start',
             sessionId,
@@ -297,7 +371,19 @@ export async function POST(request: Request) {
             scenario: scenarioData,
             agents: includeAgents,
             maxRounds,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            // 📄 ENHANCED: Send document context at the START of discussion
+            documentContext: documentContext.length > 0 ? {
+              documentsUsed: documentContext.length,
+              citations: documentContext.map((doc, index) => ({
+                id: doc.id,
+                name: doc.metadata.documentName,
+                relevanceScore: doc.score,
+                excerpt: doc.text.substring(0, 200) + '...',
+                citationIndex: index + 1,
+                fullText: doc.text // Include full text for reference
+              }))
+            } : null
           };
           
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(initialData)}\n\n`));
@@ -361,15 +447,40 @@ export async function POST(request: Request) {
                   sessionId
                 );
 
-                // Send agent response
+                // 📄 ENHANCED: Extract document citations from agent response
+                const citedDocuments: number[] = [];
+                const citationPattern = /\[Document (\d+)\]/g;
+                let match;
+                while ((match = citationPattern.exec(agentResponse.response)) !== null) {
+                  const docNum = parseInt(match[1]);
+                  if (!citedDocuments.includes(docNum)) {
+                    citedDocuments.push(docNum);
+                  }
+                }
+
+                // 🎯 ENHANCED: Parse reasoning metadata
+                const { cleanResponse, confidence, reasoning } = parseReasoningMetadata(agentResponse.response);
+
+                // Send agent response with document metadata and reasoning
                 const agentResponseData = {
                   type: 'agent_response',
                   agentType,
-                  response: agentResponse.response,
+                  response: cleanResponse || agentResponse.response, // Use cleaned response if metadata was found
                   timestamp: agentResponse.timestamp,
                   modelUsed: agentResponse.modelUsed,
-                  confidence: 0.8,
-                  roundNumber
+                  confidence,
+                  reasoning,
+                  roundNumber,
+                  // 📄 ENHANCED: Include document usage metadata
+                  documentMetadata: citedDocuments.length > 0 ? {
+                    citedDocuments,
+                    documentsUsed: citedDocuments.length,
+                    hasDocumentContext: true
+                  } : {
+                    citedDocuments: [],
+                    documentsUsed: 0,
+                    hasDocumentContext: documentContext.length > 0
+                  }
                 };
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify(agentResponseData)}\n\n`));
 
@@ -385,15 +496,20 @@ export async function POST(request: Request) {
                 await prisma.message.create({
                   data: {
                     id: `msg-${agentType}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                    content: agentResponse.response,
+                    content: cleanResponse || agentResponse.response,
                     agentType: agentType,
                     sessionId: sessionId,
                     participantId: participant?.id,
                     createdAt: new Date(agentResponse.timestamp),
                     metadata: JSON.stringify({
                       modelUsed: agentResponse.modelUsed,
-                      confidence: 0.8,
-                      roundNumber: roundNumber
+                      confidence,
+                      reasoning,
+                      roundNumber: roundNumber,
+                      documentMetadata: citedDocuments.length > 0 ? {
+                        citedDocuments,
+                        documentsUsed: citedDocuments.length
+                      } : undefined
                     })
                   }
                 });
