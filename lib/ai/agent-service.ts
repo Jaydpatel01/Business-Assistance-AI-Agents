@@ -1028,7 +1028,7 @@ Provide your synthesis in this exact format:
 
     const genAI = getGeminiClient();
     // Use the configured model from environment variables
-    const modelName = process.env.AI_MODEL || 'gemini-1.5-flash-latest';
+    const modelName = process.env.AI_MODEL || 'gemini-2.0-flash-lite';
     const model = genAI.getGenerativeModel({ model: modelName });
     
     const result = await model.generateContent(synthesisPrompt);
