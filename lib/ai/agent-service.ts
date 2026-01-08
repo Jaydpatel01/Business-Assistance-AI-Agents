@@ -11,7 +11,7 @@ import { explainableAIService } from './explainable-ai-service';
 const getGeminiClient = (agentType?: AgentType) => {
   try {
     let apiKey: string | undefined;
-    
+
     // Use agent-specific API key if available
     if (agentType) {
       const agentKeyMap = {
@@ -22,12 +22,12 @@ const getGeminiClient = (agentType?: AgentType) => {
       };
       apiKey = agentKeyMap[agentType];
     }
-    
+
     // Fallback to general API key
     if (!apiKey) {
       apiKey = getApiKey();
     }
-    
+
     if (!apiKey) {
       throw new Error('Google Gemini API key is not configured');
     }
@@ -126,13 +126,13 @@ interface RelevantDocument {
 
 // Create agent prompt with enhanced context
 const createAgentPrompt = (
-  agentType: AgentType, 
-  scenario: ScenarioData, 
-  context: string, 
+  agentType: AgentType,
+  scenario: ScenarioData,
+  context: string,
   companyName = "the company"
 ) => {
   const profile = agentProfiles[agentType];
-  
+
   return `You are the ${profile.role} of ${companyName}.
 
 PERSONALITY & APPROACH:
@@ -237,15 +237,17 @@ I support this initiative with a focus on comprehensive change management and em
 
 // Enhanced agent response with RAG support, demo fallback, and caching
 export async function getAgentResponse(
-  agentType: AgentType, 
-  scenario: ScenarioData, 
+  agentType: AgentType,
+  scenario: ScenarioData,
   context: string,
   companyName?: string,
   useDemoData?: boolean,
   includeRAG?: boolean,
   sessionId?: string,
   userId?: string,
-  organizationId?: string
+  organizationId?: string,
+  prefetchedDocuments?: RelevantDocument[], // NEW: Pre-fetched RAG documents
+  prefetchedMarketData?: MarketIntelligence | null // NEW: Pre-fetched market data
 ): Promise<AgentResponse> {
   try {
     // If demo data is explicitly requested, return demo response immediately
@@ -271,7 +273,7 @@ export async function getAgentResponse(
     try {
       const scenarioKey = `${scenario.name}:${scenario.description}`;
       const cached = agentResponseCache.get(agentType, context, scenarioKey);
-      
+
       if (cached) {
         console.log(`In-memory cache hit for agent ${agentType}`);
         return {
@@ -292,7 +294,7 @@ export async function getAgentResponse(
     // Check Redis cache for real users
     try {
       const cachedResponse = await cacheService.getCachedAgentResponse(agentType, JSON.stringify(scenario), context);
-      
+
       if (cachedResponse) {
         console.log(`Redis cache hit for agent ${agentType}`);
         return {
@@ -308,13 +310,22 @@ export async function getAgentResponse(
 
     const profile = agentProfiles[agentType];
     const modelName = getModelForAgent(agentType);
-    
+
     // Get relevant documents if RAG is enabled
     let ragContext = '';
     let relevantDocuments: RelevantDocument[] = [];
-    
-    if (includeRAG && sessionId) {
+
+    // Use prefetched documents if available, otherwise fetch
+    if (prefetchedDocuments && prefetchedDocuments.length > 0) {
+      console.log(`✅ Using prefetched RAG documents for ${agentType} (${prefetchedDocuments.length} docs)`);
+      relevantDocuments = prefetchedDocuments;
+      // Format documents into context string
+      ragContext = relevantDocuments
+        .map((doc, idx) => `[Document ${idx + 1}] ${doc.fileName}:\n${doc.excerpt}`)
+        .join('\n\n');
+    } else if (includeRAG && sessionId && !prefetchedDocuments) {
       try {
+        console.log(`⚠️  No prefetched docs, fetching RAG for ${agentType}`);
         const ragData = await retrieveRelevantDocuments(context, agentType, userId, organizationId);
         ragContext = ragData.context;
         relevantDocuments = ragData.documents;
@@ -326,8 +337,13 @@ export async function getAgentResponse(
 
     // Get market intelligence data
     let marketData: MarketIntelligence | null = null;
-    if (includeRAG) { // Use same flag for market intelligence
+    // Use prefetched market data if available, otherwise fetch
+    if (prefetchedMarketData !== undefined) {
+      console.log(`✅ Using prefetched market data for ${agentType}`);
+      marketData = prefetchedMarketData;
+    } else if (includeRAG && !prefetchedMarketData) { // Use same flag for market intelligence
       try {
+        console.log(`⚠️  No prefetched market data, fetching for ${agentType}`);
         marketData = await retrieveMarketIntelligence(agentType);
       } catch (marketError) {
         console.warn('Market intelligence retrieval failed:', marketError);
@@ -343,22 +359,22 @@ export async function getAgentResponse(
       console.warn('Memory advice retrieval failed:', memoryError);
       // Continue without memory advice
     }
-    
+
     const prompt = createEnhancedAgentPrompt(agentType, scenario, context, companyName, ragContext, relevantDocuments, marketData, memoryAdvice);
-    
+
     // Get AI provider from environment
     const provider = process.env.AI_PROVIDER || 'gemini';
     let text: string;
     const startTime = Date.now();
     const timeoutMs = 30000; // 30 second timeout
-    
+
     // Create timeout promise
     const timeoutPromise = new Promise<never>((_, reject) => {
       setTimeout(() => {
         reject(new Error(`AI request timeout after ${timeoutMs}ms`));
       }, timeoutMs);
     });
-    
+
     try {
       const aiPromise = (async () => {
         switch (provider) {
@@ -372,7 +388,7 @@ export async function getAgentResponse(
                 content: prompt
               }]
             });
-            
+
             // Extract text from Claude's response
             const content = message.content[0];
             if (content.type === 'text') {
@@ -381,11 +397,11 @@ export async function getAgentResponse(
               throw new Error('Unexpected response format from Claude');
             }
           }
-          
+
           case 'gemini':
           default: {
             const genAI = getGeminiClient(agentType);
-            const model = genAI.getGenerativeModel({ 
+            const model = genAI.getGenerativeModel({
               model: modelName,
               generationConfig: {
                 temperature: 0.7,
@@ -399,7 +415,7 @@ export async function getAgentResponse(
                   threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
                 },
                 {
-                  category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, 
+                  category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
                   threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
                 },
                 {
@@ -412,25 +428,25 @@ export async function getAgentResponse(
                 },
               ],
             });
-            
+
             const result = await model.generateContent(prompt);
             const response = await result.response;
-            
+
             // Check if response was blocked
             if (response.promptFeedback?.blockReason) {
               throw new Error(`Content blocked: ${response.promptFeedback.blockReason}`);
             }
-            
+
             return response.text();
           }
         }
       })();
-      
+
       // Race between AI call and timeout
       text = await Promise.race([aiPromise, timeoutPromise]);
     } catch (aiError: unknown) {
       console.error(`AI provider ${provider} failed:`, aiError);
-      
+
       // Log specific error details for Gemini API issues
       if (provider === 'gemini' || provider === 'default') {
         const error = aiError as Error;
@@ -439,7 +455,7 @@ export async function getAgentResponse(
           name: error.name,
           stack: error.stack?.split('\n').slice(0, 3).join('\n') // First 3 lines of stack
         });
-        
+
         // Check for common Gemini API errors
         if (error.message?.includes('API_KEY_INVALID')) {
           throw new Error('Invalid Gemini API key. Please check your GEMINI_API_KEY environment variable.');
@@ -454,12 +470,12 @@ export async function getAgentResponse(
           throw new Error('Content was blocked by Gemini safety filters. Try rephrasing your request.');
         }
       }
-      
+
       throw aiError;
     }
 
     const responseTime = Date.now() - startTime;
-    
+
     // Track decision in explainable AI system (Phase 6 integration)
     let auditId: string | null = null;
     try {
@@ -551,7 +567,7 @@ export async function getAgentResponse(
           relevance: 1.0,
           reliability: 0.8,
           citation: `[${modelName}]`,
-          metadata: { 
+          metadata: {
             aiProvider: provider,
             modelName,
             responseLength: text.length
@@ -571,7 +587,7 @@ export async function getAgentResponse(
       console.warn('Failed to track decision in explainable AI system:', explainabilityError);
       // Don't fail the request if explainability tracking fails
     }
-    
+
     // Store memory for learning (Phase 5 integration)
     try {
       await memoryService.storeMemory({
@@ -630,10 +646,10 @@ export async function getAgentResponse(
             provider
           }
         };
-        
+
         // Cache in Redis
         await cacheService.cacheAgentResponse(agentType, JSON.stringify(scenario), context, cacheData, 1800);
-        
+
         // Also cache in-memory for faster access
         const scenarioKey = `${scenario.name}:${scenario.description}`;
         agentResponseCache.set(agentType, context, scenarioKey, {
@@ -649,12 +665,12 @@ export async function getAgentResponse(
     return agentResponse;
   } catch (error) {
     console.error(`Error getting agent response for ${agentType}:`, error);
-    
+
     if (useDemoData) {
       // For demo users, fallback to demo response on API error
       const profile = agentProfiles[agentType];
       console.log(`Falling back to demo response for ${agentType} due to API error`);
-      
+
       return {
         response: demoResponses[agentType],
         agent: profile,
@@ -678,9 +694,9 @@ export async function getAgentResponse(
 
 // Create enhanced agent prompt with RAG context and source citations
 const createEnhancedAgentPrompt = (
-  agentType: AgentType, 
-  scenario: ScenarioData, 
-  context: string, 
+  agentType: AgentType,
+  scenario: ScenarioData,
+  context: string,
   companyName = "the company",
   ragContext = "",
   documents: RelevantDocument[] = [],
@@ -688,7 +704,7 @@ const createEnhancedAgentPrompt = (
   memoryAdvice = ""
 ) => {
   const basePrompt = createAgentPrompt(agentType, scenario, context, companyName);
-  
+
   let enhancedPrompt = basePrompt;
 
   // Add memory-based advice (Phase 5 integration)
@@ -701,11 +717,11 @@ const createEnhancedAgentPrompt = (
     const marketContext = formatMarketIntelligence(marketData, agentType);
     enhancedPrompt += `\n\nCURRENT MARKET INTELLIGENCE:\n${marketContext}`;
   }
-  
+
   if (ragContext && documents.length > 0) {
     // Create source map for citations
     const sourceMap = documents.map((doc, index) => `[${index + 1}] ${doc.fileName}`).join('\n');
-    
+
     enhancedPrompt += `\n\nRELEVANT COMPANY DOCUMENTS:\n${ragContext}\n\nDOCUMENT SOURCES:\n${sourceMap}`;
   }
 
@@ -715,21 +731,21 @@ const createEnhancedAgentPrompt = (
 
   if (hasMarketData || hasDocuments) {
     enhancedPrompt += `\n\nENHANCED INSTRUCTIONS:`;
-    
+
     if (hasDocuments) {
       enhancedPrompt += `
 - Base your analysis on the provided company documents above
 - Reference specific data points and findings from the documents
 - Use source citations like [1], [2], etc. when referencing specific documents`;
     }
-    
+
     if (hasMarketData) {
       enhancedPrompt += `
 - Incorporate current market conditions and trends into your analysis
 - Reference specific market indicators, stock performance, and sector data
 - Consider how market sentiment and economic conditions impact your recommendations`;
     }
-    
+
     enhancedPrompt += `
 - Provide ${hasDocuments ? 'document-backed' : 'market-informed'} insights that align with your ${agentProfiles[agentType].role} expertise
 - Combine ${hasDocuments ? 'document insights' : ''} ${hasMarketData ? 'market intelligence' : ''} with your professional knowledge for comprehensive recommendations
@@ -757,7 +773,7 @@ ASSUMPTIONS:
 DATA_SOURCES: ${hasDocuments ? 'Company Documents' : ''}${hasDocuments && hasMarketData ? ', ' : ''}${hasMarketData ? 'Market Intelligence, Industry Trends' : ''}
 ---END_METADATA---`;
   }
-  
+
   return enhancedPrompt;
 }
 
@@ -766,7 +782,7 @@ async function retrieveRelevantDocuments(query: string, agentType: AgentType, us
   try {
     // Import RAG search function
     const { getRAGContext } = await import('../rag');
-    
+
     // Configure search parameters based on agent type
     const searchOptions = {
       maxChunks: agentType === 'ceo' ? 7 : 5, // CEO gets more context for strategic decisions
@@ -777,10 +793,10 @@ async function retrieveRelevantDocuments(query: string, agentType: AgentType, us
     };
 
     console.log(`Retrieving relevant documents for ${agentType} with query: "${query.substring(0, 100)}..."`);
-    
+
     // Get context from RAG system
     const ragResult = await getRAGContext(query, searchOptions);
-    
+
     // Convert RAG results to our format
     const relevantDocuments: RelevantDocument[] = ragResult.sources.map((source, index) => ({
       id: `rag_${index}`,
@@ -791,15 +807,15 @@ async function retrieveRelevantDocuments(query: string, agentType: AgentType, us
     }));
 
     console.log(`Found ${relevantDocuments.length} relevant documents for ${agentType} agent`);
-    
+
     return {
       context: ragResult.context,
       documents: relevantDocuments
     };
-    
+
   } catch (error) {
     console.error('Error retrieving RAG documents:', error);
-    
+
     // For real users, don't fallback to mock data - throw the error
     throw new Error('Document retrieval system is currently unavailable. Please try again later.');
   }
@@ -809,15 +825,15 @@ async function retrieveRelevantDocuments(query: string, agentType: AgentType, us
 async function retrieveMarketIntelligence(agentType: AgentType): Promise<MarketIntelligence | null> {
   try {
     console.log(`Retrieving market intelligence for ${agentType} agent`);
-    
+
     // Get relevant watchlist based on agent type
     const watchlist = getAgentWatchlist(agentType);
-    
+
     // Retrieve comprehensive market data
     const marketData = await marketService.getMarketIntelligence(watchlist);
-    
+
     console.log(`Retrieved market data with ${marketData.stocks.length} stocks, ${marketData.news.length} news items`);
-    
+
     return marketData;
   } catch (error) {
     console.error('Error retrieving market intelligence:', error);
@@ -828,16 +844,16 @@ async function retrieveMarketIntelligence(agentType: AgentType): Promise<MarketI
 // Format market intelligence for agent prompts
 function formatMarketIntelligence(marketData: MarketIntelligence, agentType: AgentType): string {
   const { stocks, indices, news, sectorPerformance } = marketData;
-  
+
   let formatted = `Market Data (${new Date(marketData.timestamp).toLocaleString()}):\n\n`;
-  
+
   // Major indices
   formatted += `MAJOR INDICES:\n`;
   formatted += `• S&P 500: $${indices.sp500.price.toFixed(2)} (${indices.sp500.changePercent > 0 ? '+' : ''}${indices.sp500.changePercent.toFixed(2)}%)\n`;
   formatted += `• NASDAQ: $${indices.nasdaq.price.toFixed(2)} (${indices.nasdaq.changePercent > 0 ? '+' : ''}${indices.nasdaq.changePercent.toFixed(2)}%)\n`;
   formatted += `• Dow Jones: $${indices.dow.price.toFixed(2)} (${indices.dow.changePercent > 0 ? '+' : ''}${indices.dow.changePercent.toFixed(2)}%)\n`;
   formatted += `• VIX (Volatility): ${indices.vix.price.toFixed(2)} (${indices.vix.changePercent > 0 ? '+' : ''}${indices.vix.changePercent.toFixed(2)}%)\n\n`;
-  
+
   // Key stocks relevant to agent
   if (stocks.length > 0) {
     formatted += `KEY STOCKS (Agent Watchlist):\n`;
@@ -848,18 +864,18 @@ function formatMarketIntelligence(marketData: MarketIntelligence, agentType: Age
     });
     formatted += `\n`;
   }
-  
+
   // Sector performance (especially relevant for strategic decisions)
   if (Object.keys(sectorPerformance).length > 0) {
     formatted += `SECTOR PERFORMANCE:\n`;
     Object.entries(sectorPerformance)
-      .sort(([,a], [,b]) => b - a) // Sort by performance
+      .sort(([, a], [, b]) => b - a) // Sort by performance
       .forEach(([sector, perf]) => {
         formatted += `• ${sector}: ${perf > 0 ? '+' : ''}${perf.toFixed(2)}%\n`;
       });
     formatted += `\n`;
   }
-  
+
   // Recent financial news (top 3-5 most relevant)
   if (news.length > 0) {
     const relevantNews = news.slice(0, agentType === 'ceo' ? 5 : 3);
@@ -872,7 +888,7 @@ function formatMarketIntelligence(marketData: MarketIntelligence, agentType: Age
       formatted += `   Source: ${item.source} | ${new Date(item.publishedAt).toLocaleDateString()}\n\n`;
     });
   }
-  
+
   return formatted;
 }
 
@@ -881,24 +897,24 @@ function getAgentWatchlist(agentType: AgentType): string[] {
   const baseTech = ['AAPL', 'GOOGL', 'MSFT', 'NVDA'];
   const baseFinancial = ['JPM', 'BAC', 'WFC', 'GS'];
   const baseConsumer = ['AMZN', 'TSLA', 'HD', 'WMT'];
-  
+
   switch (agentType) {
     case 'ceo':
       // Broad market view for strategic decisions
       return [...baseTech, ...baseFinancial.slice(0, 2), ...baseConsumer.slice(0, 2), 'NFLX', 'DIS'];
-    
+
     case 'cfo':
       // Financial sector focus + major tech
       return [...baseFinancial, ...baseTech.slice(0, 3), 'BRK-B', 'V'];
-    
+
     case 'cto':
       // Technology focus
       return [...baseTech, 'META', 'NFLX', 'ADBE', 'CRM', 'ORCL'];
-    
+
     case 'hr':
       // Human capital and major employers
       return [...baseTech.slice(0, 3), ...baseConsumer.slice(0, 2), 'UNH', 'PFE'];
-    
+
     default:
       return baseTech;
   }
@@ -907,31 +923,31 @@ function getAgentWatchlist(agentType: AgentType): string[] {
 // Helper function to determine document category based on filename and agent type
 function determineDocumentCategory(fileName: string, agentType: AgentType): string {
   const lowerFileName = fileName.toLowerCase();
-  
+
   // Financial documents
-  if (lowerFileName.includes('financial') || lowerFileName.includes('budget') || 
-      lowerFileName.includes('revenue') || lowerFileName.includes('profit')) {
+  if (lowerFileName.includes('financial') || lowerFileName.includes('budget') ||
+    lowerFileName.includes('revenue') || lowerFileName.includes('profit')) {
     return agentType === 'cfo' ? 'primary' : 'secondary';
   }
-  
+
   // Strategic documents
-  if (lowerFileName.includes('strategy') || lowerFileName.includes('plan') || 
-      lowerFileName.includes('vision') || lowerFileName.includes('roadmap')) {
+  if (lowerFileName.includes('strategy') || lowerFileName.includes('plan') ||
+    lowerFileName.includes('vision') || lowerFileName.includes('roadmap')) {
     return agentType === 'ceo' ? 'primary' : 'secondary';
   }
-  
+
   // Technical documents
-  if (lowerFileName.includes('tech') || lowerFileName.includes('architecture') || 
-      lowerFileName.includes('development') || lowerFileName.includes('infrastructure')) {
+  if (lowerFileName.includes('tech') || lowerFileName.includes('architecture') ||
+    lowerFileName.includes('development') || lowerFileName.includes('infrastructure')) {
     return agentType === 'cto' ? 'primary' : 'secondary';
   }
-  
+
   // HR documents
-  if (lowerFileName.includes('hr') || lowerFileName.includes('employee') || 
-      lowerFileName.includes('talent') || lowerFileName.includes('culture')) {
+  if (lowerFileName.includes('hr') || lowerFileName.includes('employee') ||
+    lowerFileName.includes('talent') || lowerFileName.includes('culture')) {
     return agentType === 'hr' ? 'primary' : 'secondary';
   }
-  
+
   return 'general';
 }
 
@@ -943,7 +959,7 @@ async function generateEmbeddings(_text: string): Promise<number[]> {
   // - OpenAI embeddings API
   // - Google Vertex AI embeddings
   // - Local embedding models
-  
+
   return new Array(1536).fill(0).map(() => Math.random());
 }
 
@@ -953,7 +969,7 @@ export async function synthesizeDecision(agentResponses: AgentResponse[], scenar
   try {
     // Collect unique documents referenced across all agent responses
     const allDocuments = new Map<string, { fileName: string; count: number; agents: string[] }>();
-    
+
     agentResponses.forEach(response => {
       if (response.relevantDocuments) {
         response.relevantDocuments.forEach(doc => {
@@ -975,12 +991,12 @@ export async function synthesizeDecision(agentResponses: AgentResponse[], scenar
 
     // Create document summary for synthesis context
     const documentSummary = Array.from(allDocuments.entries())
-      .sort(([,a], [,b]) => b.count - a.count) // Sort by most referenced
+      .sort(([, a], [, b]) => b.count - a.count) // Sort by most referenced
       .map(([, doc]) => `• ${doc.fileName} (referenced by: ${doc.agents.join(', ')})`)
       .join('\n');
 
-    const responseTexts = agentResponses.map(r => 
-      `**${r.agent.role}**: ${r.response}${r.relevantDocuments && r.relevantDocuments.length > 0 ? 
+    const responseTexts = agentResponses.map(r =>
+      `**${r.agent.role}**: ${r.response}${r.relevantDocuments && r.relevantDocuments.length > 0 ?
         `\n[Documents referenced: ${r.relevantDocuments.map(d => d.fileName).join(', ')}]` : ''}`
     ).join('\n\n');
 
@@ -1030,7 +1046,7 @@ Provide your synthesis in this exact format:
     // Use the configured model from environment variables
     const modelName = process.env.AI_MODEL || 'gemini-2.0-flash-lite';
     const model = genAI.getGenerativeModel({ model: modelName });
-    
+
     const result = await model.generateContent(synthesisPrompt);
     const response = await result.response;
     const text = response.text();
@@ -1089,12 +1105,12 @@ export async function* streamAgentResponse(
   if (includeRAG) {
     try {
       marketData = await retrieveMarketIntelligence(agentType);
-    } catch {}
+    } catch { }
   }
   let memoryAdvice = '';
   try {
     memoryAdvice = await memoryService.generateContextualAdvice(agentType, `${scenario.name}: ${context}`);
-  } catch {}
+  } catch { }
   const prompt = createEnhancedAgentPrompt(agentType, scenario, context, companyName, ragContext, relevantDocuments, marketData, memoryAdvice);
 
   // Only Gemini streaming is implemented for now

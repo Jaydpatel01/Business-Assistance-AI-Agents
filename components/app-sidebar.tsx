@@ -1,6 +1,6 @@
 "use client"
 
-import { Brain, LayoutDashboard, FileText, Users, ClipboardList, Settings, BarChart3, Upload, Bot, Sparkles } from "lucide-react"
+import { Brain, LayoutDashboard, FileText, Users, ClipboardList, Settings, BarChart3, Upload, Bot, Sparkles, Presentation } from "lucide-react"
 import {
   Sidebar,
   SidebarContent,
@@ -50,6 +50,12 @@ const items = [
     title: "Documents",
     url: "/documents",
     icon: Upload,
+  },
+  {
+    title: "AI Presentations",
+    url: "http://localhost:3001",
+    icon: Presentation,
+    external: true, // Flag to open in new tab
   },
   {
     title: "User Experience",
@@ -110,10 +116,22 @@ export function AppSidebar() {
                     tooltip={state === "collapsed" ? item.title : undefined}
                     className="mx-1"
                   >
-                    <Link href={item.url} className="flex items-center gap-3 w-full">
-                      <item.icon className="h-4 w-4 shrink-0" />
-                      <span className="group-data-[collapsible=icon]:sr-only font-medium">{item.title}</span>
-                    </Link>
+                    {item.external ? (
+                      <a
+                        href={item.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-3 w-full"
+                      >
+                        <item.icon className="h-4 w-4 shrink-0" />
+                        <span className="group-data-[collapsible=icon]:sr-only font-medium">{item.title}</span>
+                      </a>
+                    ) : (
+                      <Link href={item.url} className="flex items-center gap-3 w-full">
+                        <item.icon className="h-4 w-4 shrink-0" />
+                        <span className="group-data-[collapsible=icon]:sr-only font-medium">{item.title}</span>
+                      </Link>
+                    )}
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}

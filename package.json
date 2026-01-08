@@ -6,6 +6,7 @@
   "scripts": {
     "build": "next build",
     "dev": "next dev",
+    "dev:all": "echo Starting both apps... && start cmd /k \"cd Executive-AI-Presentation-main && npm run dev -- -p 3001\" && npm run dev",
     "lint": "next lint",
     "lint:fix": "next lint --fix",
     "type-check": "tsc --noEmit",

@@ -41,7 +41,7 @@ export default function DecisionsPage() {
       try {
         const response = await fetch('/api/decisions')
         const data = await response.json()
-        
+
         if (data.success) {
           setDecisions(data.data)
         } else {
@@ -130,7 +130,7 @@ export default function DecisionsPage() {
           decisions.map((decision) => {
             const confidence = decision.confidence || 0
             const riskLevel = decision.riskLevel || 0
-            
+
             return (
               <Card
                 key={decision.id}
@@ -187,7 +187,7 @@ export default function DecisionsPage() {
                     </div>
                     <div className="flex gap-2">
                       <Button asChild size="sm" className="bg-indigo-600 hover:bg-indigo-700">
-                        <Link href={`/decisions/${decision.id}`}>
+                        <Link href={`/decisions/${decision.sessionId}`}>
                           <Eye className="h-4 w-4 mr-2" />
                           View Details
                         </Link>
